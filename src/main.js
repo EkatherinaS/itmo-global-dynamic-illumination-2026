@@ -2,12 +2,15 @@ import * as THREE from "three/webgpu";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MapControls } from "three/addons/controls/MapControls.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+import Stats from "three/addons/libs/stats.module.js";
 
 function setMaterialRecursive(object3d, material) {
 	object3d.children.forEach((child) => {
 		if (child.material) {
+			//https://threejs.org/docs/#Material.dispose
 			child.material.dispose();
 			child.material = material;
+			child.castShadow = true;
 		}
 		if (child.children) setMaterialRecursive(child, material);
 	});
@@ -21,18 +24,21 @@ function main() {
 	renderer.setSize(window.innerWidth, window.innerHeight);
 	renderer.setAnimationLoop(animate);
 	renderer.shadowMap.enabled = true;
+	renderer.shadowMap.type = THREE.VSMShadowMap;
 	document.body.appendChild(renderer.domElement);
+
+	const stats = Stats();
+	document.body.appendChild(stats.dom);
 
 	const fov = 60;
 	const aspect = window.innerWidth / window.innerHeight;
-	const near = 0.01;
-	const far = 10;
+	const near = 0.1;
+	const far = 3;
 	const camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
-	camera.position.set(0, 2, 0);
+	camera.position.set(0, 0.5, 0);
 
 	const scene = new THREE.Scene();
 	scene.background = new THREE.Color(0xcccccc);
-	scene.fog = new THREE.FogExp2(0xcccccc, 0.1);
 
 	const controls = new MapControls(camera, renderer.domElement);
 	controls.enableDamping = true;
@@ -41,25 +47,30 @@ function main() {
 	controls.maxPolarAngle = Math.PI / 3;
 
 	const color = 0xffffff;
-	const intensity = 1;
+	const intensity = 2;
 	const light = new THREE.DirectionalLight(color, intensity);
-	light.position.set(-1, 2, 4);
+	light.position.set(-1, 2, 1);
+	light.castShadow = true;
+	light.shadow.radius = 1;
+	light.shadow.blurSamples = 4;
+	light.shadow.camera.near = 1;
+	light.shadow.camera.far = 5;
+	light.shadow.mapSize.width = 1024;
+	light.shadow.mapSize.height = 1024;
+	light.shadow.bias = -0.002;
 	scene.add(light);
 
 	const ambientLight = new THREE.AmbientLight(color, 0.5);
 	scene.add(ambientLight);
 
-	const material = new THREE.MeshPhongMaterial({
-		color: 0xabcdef,
-	});
-
 	const materialSurface = new THREE.MeshPhongMaterial({
 		color: 0x456789,
 	});
-	const geometry = new THREE.PlaneGeometry(100, 100);
+	const geometry = new THREE.PlaneGeometry(20, 20);
 	const mesh = new THREE.Mesh(geometry, materialSurface);
 	mesh.position.set(0, 0, 0);
 	mesh.rotateX(-Math.PI / 2);
+	mesh.receiveShadow = true;
 	scene.add(mesh);
 
 	const loader = new GLTFLoader();
@@ -67,6 +78,9 @@ function main() {
 	loader.load(
 		"../public/models/map.glb",
 		function (gltf) {
+			const material = new THREE.MeshPhongMaterial({
+				color: 0xabcdef,
+			});
 			gltf.scene.scale.set(0.001, 0.001, 0.001);
 			setMaterialRecursive(gltf.scene, material);
 			scene.add(gltf.scene);
@@ -79,6 +93,7 @@ function main() {
 
 	function animate() {
 		controls.update();
+		stats.update();
 		render();
 	}
 
