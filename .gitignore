@@ -1,7 +1,7 @@
 # Rollup build output
 
 # for gh-pages
-# docs/
+dist/
 build/
 .rollup.cache/
 
