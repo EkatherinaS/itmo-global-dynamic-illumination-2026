@@ -1,0 +1,10 @@
+# Rollup build output
+dist/
+build/
+.rollup.cache/
+
+# Node modules
+node_modules/
+
+# Custom temp folders
+temp/
