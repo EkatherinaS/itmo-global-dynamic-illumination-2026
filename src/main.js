@@ -1,8 +1,9 @@
 import * as THREE from "three/webgpu";
+import Stats from "three/addons/libs/stats.module.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MapControls } from "three/addons/controls/MapControls.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
-import Stats from "three/addons/libs/stats.module.js";
+import { Pane } from "tweakpane";
 
 function setMaterialRecursive(object3d, material) {
 	object3d.children.forEach((child) => {
@@ -35,7 +36,7 @@ function main() {
 	const near = 0.1;
 	const far = 3;
 	const camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
-	camera.position.set(0, 0.5, 0);
+	camera.position.set(0, 1.1, 0);
 
 	const scene = new THREE.Scene();
 	scene.background = new THREE.Color(0xcccccc);
@@ -100,6 +101,14 @@ function main() {
 	function render() {
 		renderer.render(scene, camera);
 	}
+
+	const PARAMS = {
+		shadows: true,
+	};
+	const pane = new Pane();
+	pane.addBinding(PARAMS, "shadows").on("change", (ev) => {
+		renderer.shadowMap.enabled = ev.value;
+	});
 }
 
 main();

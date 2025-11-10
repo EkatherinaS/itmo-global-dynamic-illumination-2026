@@ -1,10 +1,11 @@
 {
-  "name": "global-dynamic-illumination",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "dependencies": {
-    "gltfpack": "^0.25.0",
-    "three": "^0.180.0"
-  }
+	"name": "global-dynamic-illumination",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"dependencies": {
+		"gltfpack": "^0.25.0",
+		"three": "^0.180.0",
+		"tweakpane": "^4.0.5"
+	}
 }
