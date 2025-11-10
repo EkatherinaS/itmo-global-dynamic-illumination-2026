@@ -10,7 +10,7 @@ const dev = process.env.ROLLUP_WATCH === "true";
 export default {
 	input: "src/main.js",
 	output: {
-		dir: "docs",
+		dir: "dist",
 		format: "es",
 		sourcemap: true,
 	},
@@ -22,20 +22,20 @@ export default {
 		}),
 		copy({
 			targets: [
-				{ src: "index.html", dest: "docs" },
-				{ src: "public/**/*", dest: "docs/public" },
+				{ src: "index.html", dest: "dist" },
+				{ src: "public/**/*", dest: "dist/public" },
 			],
 		}),
 		!dev && terser(),
 		dev &&
 			serve({
 				open: true,
-				contentBase: "docs",
+				contentBase: "dist",
 				port: 3000,
 			}),
 		dev &&
 			livereload({
-				watch: "docs",
+				watch: "dist",
 				delay: 200,
 			}),
 	],
