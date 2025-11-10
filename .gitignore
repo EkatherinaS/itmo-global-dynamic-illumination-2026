@@ -1,5 +1,5 @@
 # Rollup build output
-dist/
+docs/
 build/
 .rollup.cache/
 
