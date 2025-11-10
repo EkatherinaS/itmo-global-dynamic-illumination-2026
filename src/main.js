@@ -1,8 +1,10 @@
+import "./style.css";
+
 import * as THREE from "three/webgpu";
-import Stats from "three/addons/libs/stats.module.js";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { MapControls } from "three/addons/controls/MapControls.js";
-import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+import Stats from "three/examples/jsm/libs/stats.module.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { MapControls } from "three/examples/jsm/controls/MapControls.js";
+import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { Pane } from "tweakpane";
 
 function setMaterialRecursive(object3d, material) {
