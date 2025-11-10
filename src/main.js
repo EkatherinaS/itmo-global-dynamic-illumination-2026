@@ -79,7 +79,7 @@ function main() {
 	const loader = new GLTFLoader();
 	loader.setMeshoptDecoder(MeshoptDecoder);
 	loader.load(
-		"/public/models/map.glb",
+		"public/models/map.glb",
 		function (gltf) {
 			const material = new THREE.MeshPhongMaterial({
 				color: 0xabcdef,
