@@ -5,6 +5,8 @@ import terser from "@rollup/plugin-terser";
 import serve from "rollup-plugin-serve";
 import livereload from "rollup-plugin-livereload";
 
+const dev = process.env.ROLLUP_WATCH === "true";
+
 export default {
 	input: "src/main.js",
 	output: {
@@ -16,7 +18,7 @@ export default {
 		resolve(),
 		postcss({
 			extract: "style.css",
-			minimize: true,
+			minimize: !dev,
 		}),
 		copy({
 			targets: [
@@ -24,15 +26,17 @@ export default {
 				{ src: "public/**/*", dest: "dist/public" },
 			],
 		}),
-		terser(),
-		serve({
-			open: true,
-			contentBase: "dist",
-			port: 3000,
-		}),
-		livereload({
-			watch: "dist",
-			delay: 200,
-		}),
+		!dev && terser(),
+		dev &&
+			serve({
+				open: true,
+				contentBase: "dist",
+				port: 3000,
+			}),
+		dev &&
+			livereload({
+				watch: "dist",
+				delay: 200,
+			}),
 	],
 };

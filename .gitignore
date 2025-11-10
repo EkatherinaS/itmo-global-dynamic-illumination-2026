@@ -1,8 +1,5 @@
 # Rollup build output
-
-# removed for hosting on github pages
-# dist/
-
+dist/
 build/
 .rollup.cache/
 
