@@ -2,6 +2,7 @@ import resolve from "@rollup/plugin-node-resolve";
 import postcss from "rollup-plugin-postcss";
 import copy from "rollup-plugin-copy";
 import terser from "@rollup/plugin-terser";
+import commonjs from "@rollup/plugin-commonjs";
 import serve from "rollup-plugin-serve";
 import livereload from "rollup-plugin-livereload";
 
@@ -16,6 +17,7 @@ export default {
 	},
 	plugins: [
 		resolve(),
+		commonjs(),
 		postcss({
 			extract: "style.css",
 			minimize: !dev,
