@@ -1,11 +1,15 @@
 import "./style.css";
-import { DXFLoader } from "./dxf-countour-loader.js";
 
 import * as THREE from "three/webgpu";
 import Stats from "three/examples/jsm/libs/stats.module.js";
+import { DXFLoader } from "./dxf-countour-loader.js";
+import { Skydome } from "./skydome.js";
 import { MapControls } from "three/examples/jsm/controls/MapControls.js";
 import { Pane } from "tweakpane";
-import { VertexNormalsHelper } from "three/examples/jsm/Addons.js";
+import {
+	OrbitControls,
+	VertexNormalsHelper,
+} from "three/examples/jsm/Addons.js";
 
 async function main() {
 	const canvas = document.querySelector("#canvas");
@@ -28,14 +32,15 @@ async function main() {
 	camera.fov = 60;
 	camera.aspect = window.innerWidth / window.innerHeight;
 	camera.near = 0.01;
-	camera.far = 50;
+	camera.far = 100;
 	camera.position.set(0, 10, 0);
 
-	const controls = new MapControls(camera, renderer.domElement);
+	//const controls = new MapControls(camera, renderer.domElement);
+	const controls = new OrbitControls(camera, renderer.domElement);
 	controls.enableDamping = true;
 	controls.dampingFactor = 0.25;
 	controls.target.set(0, 0, 0);
-	controls.maxPolarAngle = Math.PI / 3;
+	//controls.maxPolarAngle = Math.PI / 3;
 
 	const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 	scene.add(ambientLight);
@@ -66,14 +71,12 @@ async function main() {
 	const materialSurface = new THREE.MeshPhongMaterial({
 		color: 0x456789,
 	});
-	const geometry = new THREE.PlaneGeometry(100, 100);
+	const geometry = new THREE.CircleGeometry(15, 128);
 	const mesh = new THREE.Mesh(geometry, materialSurface);
 	mesh.position.set(0, 0, 0);
 	mesh.rotateX(-Math.PI / 2);
 	mesh.receiveShadow = true;
 	scene.add(mesh);
-
-	let helper;
 
 	const dxfloader = new DXFLoader();
 	dxfloader.load("public/models/contours.dxf", function (model) {
@@ -86,14 +89,17 @@ async function main() {
 			.getCenter(group.position)
 			.multiply(new THREE.Vector3(-1, 0, -1));
 		scene.add(group);
-		helper = new VertexNormalsHelper(group.children[0], 0.1, 0xff0000);
-		scene.add(helper);
 	});
+
+	const skydome = new Skydome(15, 64);
+	scene.add(skydome.mesh);
+	const skyHelper = new VertexNormalsHelper(skydome.mesh, 1, 0xff0000);
+	skyHelper.visible = false;
+	scene.add(skyHelper);
 
 	function animate() {
 		controls.update();
 		stats.update();
-		//helper.update();
 		render();
 	}
 
@@ -104,6 +110,7 @@ async function main() {
 	const PARAMS = {
 		shadows: true,
 		shadowcamera: false,
+		skydomenormals: false,
 	};
 	const pane = new Pane({
 		title: "Settings",
@@ -120,6 +127,14 @@ async function main() {
 		})
 		.on("change", (ev) => {
 			helperShadowCamera.visible = ev.value;
+		});
+
+	pane
+		.addBinding(PARAMS, "skydomenormals", {
+			label: "skydome normals",
+		})
+		.on("change", (ev) => {
+			skyHelper.visible = ev.value;
 		});
 }
 
