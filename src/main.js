@@ -93,7 +93,7 @@ async function main() {
 	function animate() {
 		controls.update();
 		stats.update();
-		helper.update();
+		//helper.update();
 		render();
 	}
 

@@ -1,54 +1,124 @@
-import { DxfParser } from "dxf-parser";
 import * as THREE from "three/webgpu";
+import DxfParser from "dxf-json";
 
-class Polyline {
-	static TYPE = "LWPOLYLINE";
-	constructor(_vertices) {
-		this.vertices = _vertices;
+class BoundingBox {
+	constructor(x, y) {
+		this.minX = x;
+		this.minY = y;
+		this.maxX = x;
+		this.maxY = y;
 	}
 
-	getType() {
-		return this.type;
+	includeVertex(vertex) {
+		if (vertex.x < this.minX) this.minX = vertex.x;
+		if (vertex.y < this.minY) this.minY = vertex.y;
+		if (vertex.x > this.maxX) this.maxX = vertex.x;
+		if (vertex.y > this.maxY) this.maxY = vertex.y;
+	}
+
+	includeBoundingBox(boundingBox) {
+		if (boundingBox.minX < this.minX) this.minX = boundingBox.minX;
+		if (boundingBox.minY < this.minY) this.minY = boundingBox.minY;
+		if (boundingBox.maxX > this.maxX) this.maxX = boundingBox.maxX;
+		if (boundingBox.maxY > this.maxY) this.maxY = boundingBox.maxY;
+	}
+}
+
+class Polyline {
+	static TYPE = "POLYLINE";
+
+	constructor(_vertices) {
+		this.vertices = _vertices;
+		this.holes = [];
+		this.boundingBox = null;
+	}
+
+	pushHole(vertices) {
+		this.holes.push(vertices);
 	}
 
 	getBoundingBox() {
 		if (this.boundingBox) return this.boundingBox;
 
-		let minX = this.vertices[0].x;
-		let minY = this.vertices[0].y;
-		let maxX = this.vertices[0].x;
-		let maxY = this.vertices[0].y;
+		this.boundingBox = new BoundingBox(this.vertices[0].x, this.vertices[0].y);
 		this.vertices.forEach((v) => {
-			if (v.x < minX) minX = v.x;
-			if (v.y < minY) minY = v.y;
-			if (v.x > maxX) maxX = v.x;
-			if (v.y > maxY) maxY = v.y;
+			this.boundingBox.includeVertex(v);
 		});
-		this.boundingBox = {
-			min: { x: minX, y: minY },
-			max: { x: maxX, y: maxY },
-		};
 		return this.boundingBox;
 	}
-	getGeometry() {
-		const shape = new THREE.Shape();
-		const verts = this.vertices;
 
-		if (verts.length === 0) return null;
+	_isCCW(points) {
+		let area = 0;
+		const n = points.length;
+		for (let i = 0; i < n; i++) {
+			const p1 = points[i];
+			const p2 = points[(i + 1) % n];
+			area += p1.x * p2.y - p2.x * p1.y;
+		}
+		return area > 0;
+	}
+
+	_getShape(vertices, isCCW) {
+		if (vertices.length === 0) return null;
+
+		const verts = vertices;
+		const shape = new THREE.Shape();
+		shape.autoClose = true;
+
+		if (this._isCCW(verts) != isCCW) {
+			verts.reverse();
+		}
 
 		shape.moveTo(verts[0].x, verts[0].y);
-
 		for (let i = 1; i < verts.length; i++) {
 			shape.lineTo(verts[i].x, verts[i].y);
 		}
+		return shape;
+	}
+
+	optimizeByBoundingBox(boundingBox) {
+		for (let i = 0; i < this.vertices.length; i++) {
+			this.vertices[i].x -= boundingBox.minX;
+			this.vertices[i].y -= boundingBox.minY;
+		}
+		for (let i = 0; i < this.holes.length; i++) {
+			for (let j = 0; j < this.holes[i].length; j++) {
+				this.holes[i][j].x -= boundingBox.minX;
+				this.holes[i][j].y -= boundingBox.minY;
+			}
+		}
+	}
+
+	getGeometry() {
+		if (this.vertices.length === 0) return null;
+
+		const shape = this._getShape(this.vertices, false);
+		this.holes.forEach((hole) => {
+			const holeShape = this._getShape(hole, true);
+			shape.holes.push(holeShape);
+		});
 
 		const extrudeSettings = {
 			steps: 1,
 			depth: 40 + Math.random() * 100,
 			bevelEnabled: false,
 		};
-
 		return new THREE.ExtrudeGeometry(shape, extrudeSettings);
+	}
+}
+
+class Hatch {
+	static TYPE = "HATCH";
+	constructor(_entity) {
+		this.entity = _entity;
+	}
+
+	getPolyline() {
+		const polyline = new Polyline(this.entity.boundaryPaths[0].vertices);
+		for (let i = 1; i < this.entity.boundaryPaths.length; i++) {
+			polyline.pushHole(this.entity.boundaryPaths[i].vertices);
+		}
+		return polyline;
 	}
 }
 
@@ -62,11 +132,12 @@ class Model {
 	getPolylines() {
 		const polylines = [];
 		this.entities.forEach((entity) => {
-			if (entity.type == Polyline.TYPE) {
-				const polyline = new Polyline(entity.vertices);
+			if (entity.type == Hatch.TYPE) {
+				const hatch = new Hatch(entity);
+				const polyline = hatch.getPolyline();
 				polylines.push(polyline);
 			} else {
-				console.warn("Not implemented handler for type:", entity.type);
+				//console.warn("Not implemented handler for type:", entity.type);
 			}
 		});
 		return polylines;
@@ -75,39 +146,22 @@ class Model {
 	getBoundingBox() {
 		if (this.boundingBox) return this.boundingBox;
 
-		let bb = this.polylines[0].getBoundingBox();
-		let minX = bb.min.x;
-		let minY = bb.min.y;
-		let maxX = bb.max.x;
-		let maxY = bb.max.y;
+		let polylineBB = this.polylines[0].getBoundingBox();
+		this.boundingBox = new BoundingBox(polylineBB.minX, polylineBB.minY);
 
 		this.polylines.forEach((polyline) => {
-			bb = polyline.getBoundingBox();
-			if (bb.min.x < minX) minX = bb.min.x;
-			if (bb.min.y < minY) minY = bb.min.y;
-			if (bb.max.x > maxX) maxX = bb.max.x;
-			if (bb.max.y > maxY) maxY = bb.max.y;
+			polylineBB = polyline.getBoundingBox();
+			this.boundingBox.includeBoundingBox(polylineBB);
 		});
-
-		this.boundingBox = {
-			min: { x: minX, y: minY },
-			max: { x: maxX, y: maxY },
-		};
 		return this.boundingBox;
 	}
 
-	optimizePolylines() {
+	getModel() {
 		const boundingBox = this.getBoundingBox();
 		this.polylines.forEach((polyline) => {
-			polyline.vertices.forEach((vertex) => {
-				vertex.x -= boundingBox.min.x;
-				vertex.y -= boundingBox.min.y;
-			});
+			polyline.optimizeByBoundingBox(boundingBox);
 		});
-	}
 
-	getModel() {
-		this.optimizePolylines();
 		const group = new THREE.Group();
 		this.polylines.forEach((polyline) => {
 			const color = new THREE.Color();
@@ -116,8 +170,10 @@ class Model {
 				color: color,
 				flatShading: false,
 			});
+
 			const geometry = polyline.getGeometry();
 			geometry.computeVertexNormals();
+
 			const mesh = new THREE.Mesh(geometry, material);
 			mesh.castShadow = true;
 			group.add(mesh);
@@ -142,11 +198,11 @@ export class DXFLoader {
 		loader.setRequestHeader(this.requestHeader);
 		loader.setWithCredentials(this.withCredentials);
 
-		const parser = new DxfParser();
 		loader.load(
 			url,
 			function (data) {
 				try {
+					const parser = new DxfParser();
 					const dxf = parser.parseSync(data);
 					const model = new Model(dxf.entities);
 					onLoad(model);
