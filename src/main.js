@@ -35,12 +35,10 @@ async function main() {
 	camera.far = 100;
 	camera.position.set(0, 10, 0);
 
-	//const controls = new MapControls(camera, renderer.domElement);
-	const controls = new OrbitControls(camera, renderer.domElement);
+	let controls = new OrbitControls(camera, renderer.domElement);
 	controls.enableDamping = true;
 	controls.dampingFactor = 0.25;
 	controls.target.set(0, 0, 0);
-	//controls.maxPolarAngle = Math.PI / 3;
 
 	const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 	scene.add(ambientLight);
@@ -104,6 +102,15 @@ async function main() {
 	}
 
 	function render() {
+		const canvas = renderer.domElement;
+		const width = window.innerWidth;
+		const height = window.innerHeight;
+		const needResize = canvas.width != width || canvas.height != height;
+		if (needResize) {
+			renderer.setSize(window.innerWidth, window.innerHeight);
+			camera.aspect = window.innerWidth / window.innerHeight;
+			camera.updateProjectionMatrix();
+		}
 		renderer.render(scene, camera);
 	}
 
@@ -111,6 +118,7 @@ async function main() {
 		shadows: true,
 		shadowcamera: false,
 		skydomenormals: false,
+		controls: "orbit",
 	};
 	const pane = new Pane({
 		title: "Settings",
@@ -120,7 +128,6 @@ async function main() {
 	pane.addBinding(PARAMS, "shadows").on("change", (ev) => {
 		renderer.shadowMap.enabled = ev.value;
 	});
-
 	pane
 		.addBinding(PARAMS, "shadowcamera", {
 			label: "shadow camera",
@@ -128,13 +135,37 @@ async function main() {
 		.on("change", (ev) => {
 			helperShadowCamera.visible = ev.value;
 		});
-
 	pane
 		.addBinding(PARAMS, "skydomenormals", {
 			label: "skydome normals",
 		})
 		.on("change", (ev) => {
 			skyHelper.visible = ev.value;
+		});
+	pane
+		.addBinding(PARAMS, "controls", {
+			options: {
+				orbit: "orbit",
+				map: "map",
+			},
+		})
+		.on("change", (ev) => {
+			controls.dispose();
+			if (ev.value === "orbit") {
+				controls = new OrbitControls(camera, controls.domElement);
+				controls.enableDamping = true;
+				controls.dampingFactor = 0.25;
+				controls.target.set(0, 0, 0);
+			}
+			if (ev.value === "map") {
+				camera.position.set(0, 10, 0);
+
+				controls = new MapControls(camera, controls.domElement);
+				controls.enableDamping = true;
+				controls.dampingFactor = 0.25;
+				controls.target.set(0, 0, 0);
+				controls.maxPolarAngle = Math.PI / 3;
+			}
 		});
 }
 
