@@ -67,14 +67,13 @@ async function main() {
 	helperShadowCamera.visible = false;
 
 	const materialSurface = new THREE.MeshPhongMaterial({
-		color: 0x456789,
+		color: 0x2c2c2d,
 	});
 	const geometry = new THREE.CircleGeometry(15, 128);
-	const mesh = new THREE.Mesh(geometry, materialSurface);
-	mesh.position.set(0, 0, 0);
-	mesh.rotateX(-Math.PI / 2);
-	mesh.receiveShadow = true;
-	scene.add(mesh);
+	const plane = new THREE.Mesh(geometry, materialSurface);
+	plane.rotateX(-Math.PI / 2);
+	plane.receiveShadow = true;
+	scene.add(plane);
 
 	const dxfloader = new DXFLoader();
 	dxfloader.load("public/models/contours.dxf", function (model) {
@@ -89,8 +88,10 @@ async function main() {
 		scene.add(group);
 	});
 
-	const skydome = new Skydome(15, 64);
-	scene.add(skydome.mesh);
+	let sunDirection = new THREE.Vector3(0.1, 0.2, 0.3);
+	const skydome = new Skydome(15, 64, sunDirection, 0.3, 0x29a1ff, 0x2c2c2d);
+	skydome.setScene(scene);
+
 	const skyHelper = new VertexNormalsHelper(skydome.mesh, 1, 0xff0000);
 	skyHelper.visible = false;
 	scene.add(skyHelper);
@@ -119,6 +120,13 @@ async function main() {
 		shadowcamera: false,
 		skydomenormals: false,
 		controls: "orbit",
+		skydomehalfsphere: false,
+		skydomskycolor: 0x29a1ff,
+		skydomgroundcolor: 0x2c2c2d,
+		skydomsunX: 0.1,
+		skydomsunY: 0.2,
+		skydomsunZ: 0.3,
+		skydomNegv: 0.3,
 	};
 	const pane = new Pane({
 		title: "Settings",
@@ -141,6 +149,13 @@ async function main() {
 		})
 		.on("change", (ev) => {
 			skyHelper.visible = ev.value;
+		});
+	pane
+		.addBinding(PARAMS, "skydomehalfsphere", {
+			label: "skydome halfsphere",
+		})
+		.on("change", (ev) => {
+			skydome.setHalfSphere(ev.value);
 		});
 	pane
 		.addBinding(PARAMS, "controls", {
@@ -166,6 +181,73 @@ async function main() {
 				controls.target.set(0, 0, 0);
 				controls.maxPolarAngle = Math.PI / 3;
 			}
+		});
+	pane
+		.addBinding(PARAMS, "skydomskycolor", {
+			label: "sky color",
+			view: "color",
+		})
+		.on("change", (ev) => {
+			skydome.setSkyColor(ev.value);
+		});
+
+	pane
+		.addBinding(PARAMS, "skydomgroundcolor", {
+			label: "ground color",
+			view: "color",
+		})
+		.on("change", (ev) => {
+			skydome.setGroundColor(ev.value);
+			plane.material = new THREE.MeshPhongMaterial({
+				color: ev.value,
+			});
+		});
+
+	pane
+		.addBinding(PARAMS, "skydomsunX", {
+			label: "sun X",
+			min: -1,
+			max: 1,
+			step: 0.01,
+		})
+		.on("change", (ev) => {
+			sunDirection.x = ev.value;
+			skydome.setSunDirection(sunDirection);
+		});
+
+	pane
+		.addBinding(PARAMS, "skydomsunY", {
+			label: "sun Y",
+			min: 0,
+			max: 1,
+			step: 0.01,
+		})
+		.on("change", (ev) => {
+			sunDirection.y = ev.value;
+			skydome.setSunDirection(sunDirection);
+		});
+
+	pane
+		.addBinding(PARAMS, "skydomsunZ", {
+			label: "sun Z",
+			min: -1,
+			max: 1,
+			step: 0.01,
+		})
+		.on("change", (ev) => {
+			sunDirection.z = ev.value;
+			skydome.setSunDirection(sunDirection);
+		});
+
+	pane
+		.addBinding(PARAMS, "skydomNegv", {
+			label: "Negv",
+			min: 0.2,
+			max: 1,
+			step: 0.01,
+		})
+		.on("change", (ev) => {
+			skydome.setNevg(ev.value);
 		});
 }
 
