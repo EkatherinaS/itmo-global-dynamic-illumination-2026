@@ -76,11 +76,19 @@ async function main() {
 	scene.add(plane);
 
 	const dxfloader = new DXFLoader();
+	const helpers = [];
 	dxfloader.load("public/models/contours.dxf", function (model) {
 		const group = model.model;
 		group.position.set(0, 0, 0);
 		group.scale.set(0.01, 0.01, 0.01);
 		group.rotateX(-Math.PI / 2);
+		group.children.forEach((mesh) =>
+			helpers.push(new VertexNormalsHelper(mesh, 10, 0xff0000, 10))
+		);
+		helpers.forEach((helper) => {
+			group.add(helper);
+			helper.visible = false;
+		});
 		new THREE.Box3()
 			.setFromObject(group)
 			.getCenter(group.position)
@@ -89,8 +97,9 @@ async function main() {
 	});
 
 	let sunDirection = new THREE.Vector3(0.1, 0.2, 0.3);
-	const skydome = new Skydome(15, 64, sunDirection, 0.3, 0x29a1ff, 0x2c2c2d);
-	skydome.setScene(scene);
+	const skydome = new Skydome(50, 64, sunDirection, 0.3, 0x29a1ff, 0x2c2c2d);
+	skydome.setCamera(camera);
+	scene.add(camera);
 
 	const skyHelper = new VertexNormalsHelper(skydome.mesh, 1, 0xff0000);
 	skyHelper.visible = false;
@@ -119,10 +128,12 @@ async function main() {
 		shadows: true,
 		shadowcamera: false,
 		skydomenormals: false,
+		mapnormals: false,
 		controls: "orbit",
 		skydomehalfsphere: false,
 		skydomskycolor: 0x29a1ff,
 		skydomgroundcolor: 0x2c2c2d,
+		skydomWireframe: false,
 		skydomsunX: 0.1,
 		skydomsunY: 0.2,
 		skydomsunZ: 0.3,
@@ -149,6 +160,13 @@ async function main() {
 		})
 		.on("change", (ev) => {
 			skyHelper.visible = ev.value;
+		});
+	pane
+		.addBinding(PARAMS, "mapnormals", {
+			label: "map normals",
+		})
+		.on("change", (ev) => {
+			helpers.forEach((helper) => (helper.visible = ev.value));
 		});
 	pane
 		.addBinding(PARAMS, "skydomehalfsphere", {
@@ -201,6 +219,14 @@ async function main() {
 			plane.material = new THREE.MeshPhongMaterial({
 				color: ev.value,
 			});
+		});
+
+	pane
+		.addBinding(PARAMS, "skydomWireframe", {
+			label: "sky wireframe",
+		})
+		.on("change", (ev) => {
+			skydome.setWireframe(ev.value);
 		});
 
 	pane

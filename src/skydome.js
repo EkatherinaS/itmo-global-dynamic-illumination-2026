@@ -1,4 +1,7 @@
 import * as THREE from "three/webgpu";
+import { Gyroscope } from "three/addons/misc/Gyroscope.js";
+import * as BufferGeometryUtils from "three/addons/utils/BufferGeometryUtils.js";
+
 import {
 	positionLocal,
 	negate,
@@ -93,14 +96,7 @@ function Lva(gamma_s, gamma, xi, Nevg) {
 }
 
 export class Skydome {
-	constructor(
-		radius,
-		segments,
-		sunDirection,
-		nevg,
-		skyColor,
-		groundColor = null
-	) {
+	constructor(radius, segments, sunDirection, nevg, skyColor, groundColor) {
 		this.radius = radius;
 		this.segments = segments;
 
@@ -120,27 +116,31 @@ export class Skydome {
 			vec3(sunDirection.x, sunDirection.y, sunDirection.z)
 		);
 		this.white = uniform(vec3(1.0, 1.0, 1.0));
+		this.isWireframe = false;
 
 		this.update();
 	}
 
 	update() {
-		if (this.mesh && this.scene) {
-			this.scene.remove(this.mesh);
+		if (this.mesh && this.gyro) {
+			this.gyro.remove(this.mesh);
 		}
 
 		this.geometry = this.getGeometry(this.radius, this.segments);
-		this.material = this.getMaterial();
+		this.material = this.getMaterial(this.isWireframe);
 		this.mesh = this.getMesh(this.geometry, this.material);
 
-		if (this.scene) {
-			this.scene.add(this.mesh);
+		if (this.gyro) {
+			this.gyro.add(this.mesh);
 		}
 	}
 
-	setScene(scene) {
-		this.scene = scene;
-		scene.add(this.mesh);
+	setCamera(camera) {
+		this.camera = camera;
+		this.gyro = new Gyroscope();
+		this.gyro.position.set(0, -this.radius / 2, 0);
+		this.camera.add(this.gyro);
+		this.gyro.add(this.mesh);
 	}
 
 	setSunDirection(sunDirection) {
@@ -204,26 +204,48 @@ export class Skydome {
 	}
 
 	getGeometry(radius, segments) {
-		const geometry = new THREE.SphereGeometry(
+		const halfsphere = new THREE.SphereGeometry(
 			radius,
 			segments,
 			segments,
 			0,
 			Math.PI * 2,
 			0,
-			this.halfsphere ? Math.PI * 0.5 : Math.PI
+			Math.PI * 0.5
 		);
+		/*
+		const p1 = new THREE.Vector3(0, 0, 0);
+		const p2 = this.camera ? this.camera.position : new THREE.Vector3(0, 1, 0);
+		const path = new THREE.LineCurve3(p1, p2);
+		console.log(path);
+		const tube = new THREE.TubeGeometry(path);
+		console.log(tube);
+
+		const geometry = BufferGeometryUtils.mergeGeometries([halfsphere, tube]);
+*/
+		const geometry = halfsphere;
 		geometry.scale(-1, 1, 1);
 		geometry.computeVertexNormals();
 		return geometry;
 	}
 
+	setWireframe(isWireframe) {
+		this.isWireframe = isWireframe;
+		this.update();
+	}
+
 	getMaterial() {
-		const material = new THREE.MeshBasicNodeMaterial();
-		material.positionNode = this.PositionNode();
-		material.colorNode = this.ColorNode();
-		material.normalNode = this.NormalNode();
-		return material;
+		if (this.isWireframe) {
+			const material = new THREE.MeshBasicMaterial();
+			material.wireframe = true;
+			return material;
+		} else {
+			const material = new THREE.MeshBasicNodeMaterial();
+			material.positionNode = this.PositionNode();
+			material.colorNode = this.ColorNode();
+			material.normalNode = this.NormalNode();
+			return material;
+		}
 	}
 
 	getMesh(geometry, material) {

@@ -101,7 +101,9 @@ class Polyline {
 		const extrudeSettings = {
 			steps: 1,
 			depth: 40 + Math.random() * 100,
-			bevelEnabled: false,
+			bevelEnabled: true,
+			bevelThickness: 1.2,
+			bevelSegments: 16,
 		};
 		return new THREE.ExtrudeGeometry(shape, extrudeSettings);
 	}
