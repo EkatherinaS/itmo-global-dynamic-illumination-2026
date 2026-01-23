@@ -1,7 +1,7 @@
 import "./style.css";
 
 import * as THREE from "three/webgpu";
-import Stats from "three/examples/jsm/libs/stats.module.js";
+import { Inspector } from "three/examples/jsm/inspector/Inspector.js";
 import { DXFLoader } from "./dxf-countour-loader.js";
 import { Skydome } from "./skydome.js";
 import { MapControls } from "three/examples/jsm/controls/MapControls.js";
@@ -10,6 +10,14 @@ import {
 	OrbitControls,
 	VertexNormalsHelper,
 } from "three/examples/jsm/Addons.js";
+import { Ground } from "./ground.js";
+import {
+	initGeometry,
+	computeSkydom,
+	irradienceTexture,
+	computeTexture,
+} from "./irradiance-cubemap.js";
+import { SkydomeMesh } from "./skydome-mesh.js";
 
 async function main() {
 	const canvas = document.querySelector("#canvas");
@@ -21,18 +29,16 @@ async function main() {
 	renderer.shadowMap.enabled = true;
 	renderer.shadowMap.type = THREE.VSMShadowMap;
 	document.body.appendChild(renderer.domElement);
+	renderer.inspector = new Inspector();
+	document.body.appendChild(renderer.inspector.domElement);
 
 	const scene = new THREE.Scene();
-	scene.background = new THREE.Color(0xcccccc);
-
-	const stats = Stats();
-	document.body.appendChild(stats.dom);
 
 	const camera = new THREE.PerspectiveCamera();
 	camera.fov = 60;
 	camera.aspect = window.innerWidth / window.innerHeight;
 	camera.near = 0.01;
-	camera.far = 100;
+	camera.far = 256;
 	camera.position.set(0, 10, 0);
 
 	let controls = new OrbitControls(camera, renderer.domElement);
@@ -66,15 +72,6 @@ async function main() {
 	scene.add(helperShadowCamera);
 	helperShadowCamera.visible = false;
 
-	const materialSurface = new THREE.MeshPhongMaterial({
-		color: 0x2c2c2d,
-	});
-	const geometry = new THREE.CircleGeometry(15, 128);
-	const plane = new THREE.Mesh(geometry, materialSurface);
-	plane.rotateX(-Math.PI / 2);
-	plane.receiveShadow = true;
-	scene.add(plane);
-
 	const dxfloader = new DXFLoader();
 	const helpers = [];
 	dxfloader.load("public/models/contours.dxf", function (model) {
@@ -83,7 +80,7 @@ async function main() {
 		group.scale.set(0.01, 0.01, 0.01);
 		group.rotateX(-Math.PI / 2);
 		group.children.forEach((mesh) =>
-			helpers.push(new VertexNormalsHelper(mesh, 10, 0xff0000, 10))
+			helpers.push(new VertexNormalsHelper(mesh, 10, 0xff0000, 10)),
 		);
 		helpers.forEach((helper) => {
 			group.add(helper);
@@ -97,30 +94,60 @@ async function main() {
 	});
 
 	let sunDirection = new THREE.Vector3(0.1, 0.2, 0.3);
-	const skydome = new Skydome(50, 64, sunDirection, 0.3, 0x29a1ff, 0x2c2c2d);
-	skydome.setCamera(camera);
+	let skydomNegv = 0.75;
+
+	const skydome = new Skydome(sunDirection, skydomNegv);
+
+	const skydomeMesh = new SkydomeMesh(skydome, 64, 64, 0x29a1ff, 0x2c2c2d);
+	skydomeMesh.setCamera(camera);
+	skydomeMesh.setScene(scene);
 	scene.add(camera);
 
-	const skyHelper = new VertexNormalsHelper(skydome.mesh, 1, 0xff0000);
+	const ground = new Ground(50, 64, 0x2c2c2d);
+	ground.setScene(scene);
+
+	const skyHelper = new VertexNormalsHelper(skydomeMesh.mesh, 1, 0xff0000);
 	skyHelper.visible = false;
 	scene.add(skyHelper);
 
-	function animate() {
+	await renderer.init();
+
+	async function animate() {
 		controls.update();
-		stats.update();
 		render();
 	}
+
+	// compute shader init
+	const count = initGeometry(64, 64, sunDirection);
+	let updateCompute = computeSkydom(skydomNegv).compute(count);
+	const updateComputeTexture = computeTexture().compute(count);
+
+	// debug sphere for compute shader
+	const materialDebug = new THREE.MeshBasicNodeMaterial({
+		color: 0x00ff00,
+	});
+	const geometryDebug = new THREE.IcosahedronGeometry(64, 64);
+	const meshDebug = new THREE.Mesh(geometryDebug, materialDebug);
+	meshDebug.position.set(0, 3, 0);
+	meshDebug.scale.set(0.01, 0.01, 0.01);
+	scene.add(meshDebug);
 
 	function render() {
 		const canvas = renderer.domElement;
 		const width = window.innerWidth;
 		const height = window.innerHeight;
 		const needResize = canvas.width != width || canvas.height != height;
+
 		if (needResize) {
 			renderer.setSize(window.innerWidth, window.innerHeight);
 			camera.aspect = window.innerWidth / window.innerHeight;
 			camera.updateProjectionMatrix();
 		}
+
+		renderer.compute(updateCompute);
+		renderer.compute(updateComputeTexture);
+		materialDebug.colorNode = irradienceTexture;
+
 		renderer.render(scene, camera);
 	}
 
@@ -128,6 +155,7 @@ async function main() {
 		shadows: true,
 		shadowcamera: false,
 		skydomenormals: false,
+		isbackground: false,
 		mapnormals: false,
 		controls: "orbit",
 		skydomehalfsphere: false,
@@ -147,6 +175,13 @@ async function main() {
 	pane.addBinding(PARAMS, "shadows").on("change", (ev) => {
 		renderer.shadowMap.enabled = ev.value;
 	});
+	pane
+		.addBinding(PARAMS, "isbackground", {
+			label: "background",
+		})
+		.on("change", (ev) => {
+			skydomeMesh.setBackground(ev.value);
+		});
 	pane
 		.addBinding(PARAMS, "shadowcamera", {
 			label: "shadow camera",
@@ -168,13 +203,13 @@ async function main() {
 		.on("change", (ev) => {
 			helpers.forEach((helper) => (helper.visible = ev.value));
 		});
-	pane
+	/*pane
 		.addBinding(PARAMS, "skydomehalfsphere", {
 			label: "skydome halfsphere",
 		})
 		.on("change", (ev) => {
-			skydome.setHalfSphere(ev.value);
-		});
+			skydomeMesh.setHalfSphere(ev.value);
+		});*/
 	pane
 		.addBinding(PARAMS, "controls", {
 			options: {
@@ -206,7 +241,9 @@ async function main() {
 			view: "color",
 		})
 		.on("change", (ev) => {
-			skydome.setSkyColor(ev.value);
+			skydomeMesh.setSkyColor(ev.value);
+			scene.background = new THREE.Color(ev.value);
+			scene.fog = new THREE.FogExp2(ev.value, 0.002);
 		});
 
 	pane
@@ -215,10 +252,8 @@ async function main() {
 			view: "color",
 		})
 		.on("change", (ev) => {
-			skydome.setGroundColor(ev.value);
-			plane.material = new THREE.MeshPhongMaterial({
-				color: ev.value,
-			});
+			skydomeMesh.setGroundColor(ev.value);
+			ground.setGroundColor(ev.value);
 		});
 
 	pane
@@ -226,7 +261,7 @@ async function main() {
 			label: "sky wireframe",
 		})
 		.on("change", (ev) => {
-			skydome.setWireframe(ev.value);
+			skydomeMesh.setWireframe(ev.value);
 		});
 
 	pane
@@ -274,6 +309,7 @@ async function main() {
 		})
 		.on("change", (ev) => {
 			skydome.setNevg(ev.value);
+			updateCompute = computeSkydom(ev.value).compute(count);
 		});
 }
 
