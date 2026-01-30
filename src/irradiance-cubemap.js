@@ -21,17 +21,14 @@ import {
 	texture,
 } from "three/tsl";
 
-let sunDirection, count;
-let positionBuffer, uvBuffer, irradienceBuffer;
+let count, positionBuffer, uvBuffer, irradienceBuffer;
 
-export function initGeometry(radius, detail, sunDir) {
+export function initGeometry(radius, detail) {
 	const geometry = new THREE.IcosahedronGeometry(radius, detail);
 	const positions = geometry.attributes.position;
 	const uvs = geometry.attributes.uv;
 
 	count = positions.count;
-	sunDirection = vec3(sunDir.x, sunDir.y, sunDir.z);
-
 	positionBuffer = storage(positions, "vec3", positions.count);
 	uvBuffer = storage(uvs, "vec2", uvs.count);
 	irradienceBuffer = instancedArray(count, "float");
@@ -39,41 +36,41 @@ export function initGeometry(radius, detail, sunDir) {
 	return count;
 }
 
-export const computeSkydom = Fn(({ Nevg }) => {
-	const position = positionBuffer.element(instanceIndex);
+export const computeSkydom = Fn(({ nevg, sunDir }) => {
 	const irradience = irradienceBuffer.element(instanceIndex);
-	const sunDir = sunDirection.normalize();
+	const position = positionBuffer.element(instanceIndex).normalize();
+	const sunDirection = vec3(sunDir.x, sunDir.y, sunDir.z).normalize();
 
 	const gamma = asin(clamp(position.y, float(-1), float(1)));
-	const gamma_s = asin(clamp(sunDir.y, float(-1), float(1)));
-	const xi = acos(clamp(dot(sunDir, position), float(-1), float(1)));
+	const gamma_s = asin(clamp(sunDirection.y, float(-1), float(1)));
+	const xi = acos(clamp(dot(sunDirection, position), float(-1), float(1)));
 
 	const a = float(9.93)
-		.mul(pow(Nevg, 3))
-		.add(float(-10.68).mul(pow(Nevg, 2)))
-		.add(float(7.09).mul(Nevg))
+		.mul(pow(nevg, 3))
+		.add(float(-10.68).mul(pow(nevg, 2)))
+		.add(float(7.09).mul(nevg))
 		.add(float(-2.11));
 
 	const b = float(23.4)
-		.mul(pow(float(1.6).mul(Nevg), float(5.9)))
-		.mul(exp(float(-0.17).mul(Nevg)))
-		.mul(pow(float(1.1).sub(Nevg), float(1.5)));
+		.mul(pow(float(1.6).mul(nevg), float(5.9)))
+		.mul(exp(float(-0.17).mul(nevg)))
+		.mul(pow(float(1.1).sub(nevg), float(1.5)));
 
 	const c = float(62.16)
-		.mul(pow(Nevg, float(6)))
-		.add(float(-257.62).mul(pow(Nevg, float(5))))
-		.add(float(405.67).mul(pow(Nevg, float(4))))
-		.add(float(-296.6).mul(pow(Nevg, float(3))))
-		.add(float(99.3).mul(pow(Nevg, float(2))))
-		.add(float(-16.34).mul(Nevg))
+		.mul(pow(nevg, float(6)))
+		.add(float(-257.62).mul(pow(nevg, float(5))))
+		.add(float(405.67).mul(pow(nevg, float(4))))
+		.add(float(-296.6).mul(pow(nevg, float(3))))
+		.add(float(99.3).mul(pow(nevg, float(2))))
+		.add(float(-16.34).mul(nevg))
 		.add(float(0.43));
 
 	const d = float(2.06)
-		.mul(pow(Nevg, float(5)))
-		.add(float(-6.4).mul(pow(Nevg, float(4))))
-		.add(float(6.02).mul(pow(Nevg, float(3))))
-		.add(float(-1.31).mul(pow(Nevg, float(2))))
-		.add(float(0.08).mul(Nevg));
+		.mul(pow(nevg, float(5)))
+		.add(float(-6.4).mul(pow(nevg, float(4))))
+		.add(float(6.02).mul(pow(nevg, float(3))))
+		.add(float(-1.31).mul(pow(nevg, float(2))))
+		.add(float(0.08).mul(nevg));
 
 	const phiGamma = float(1).add(
 		float(a).mul(float(1).sub(pow(sin(gamma), float(0.6)))),
@@ -110,11 +107,11 @@ export const computeSkydom = Fn(({ Nevg }) => {
 	const E = float(1.124).mul(gamma_s).add(float(19.738));
 	const F = float(1.17).mul(log(gamma_s)).add(float(6.369));
 	const luz = exp(
-		A.mul(pow(Nevg, float(5)))
-			.add(B.mul(pow(Nevg, float(4))))
-			.add(C.mul(pow(Nevg, float(3))))
-			.add(D.mul(pow(Nevg, float(2))))
-			.add(E.mul(Nevg))
+		A.mul(pow(nevg, float(5)))
+			.add(B.mul(pow(nevg, float(4))))
+			.add(C.mul(pow(nevg, float(3))))
+			.add(D.mul(pow(nevg, float(2))))
+			.add(E.mul(nevg))
 			.add(F),
 	);
 
@@ -124,7 +121,6 @@ export const computeSkydom = Fn(({ Nevg }) => {
 
 const size = 256;
 const irradienceStorageTexture = new THREE.StorageTexture(size, size);
-irradienceStorageTexture.minFilter = THREE.LinearMipMapLinearFilter;
 export let irradienceTexture = {};
 
 export const computeTexture = Fn(() => {

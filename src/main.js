@@ -94,9 +94,9 @@ async function main() {
 	});
 
 	let sunDirection = new THREE.Vector3(0.1, 0.2, 0.3);
-	let skydomNegv = 0.75;
+	let skydomNevg = 0.75;
 
-	const skydome = new Skydome(sunDirection, skydomNegv);
+	const skydome = new Skydome(sunDirection, skydomNevg);
 
 	const skydomeMesh = new SkydomeMesh(skydome, 64, 64, 0x29a1ff, 0x2c2c2d);
 	skydomeMesh.setCamera(camera);
@@ -118,18 +118,17 @@ async function main() {
 	}
 
 	// compute shader init
-	const count = initGeometry(64, 64, sunDirection);
-	let updateCompute = computeSkydom(skydomNegv).compute(count);
+	const count = initGeometry(64, 64);
+	let updateCompute = computeSkydom(skydomNevg, sunDirection).compute(count);
 	const updateComputeTexture = computeTexture().compute(count);
 
 	// debug sphere for compute shader
 	const materialDebug = new THREE.MeshBasicNodeMaterial({
 		color: 0x00ff00,
 	});
-	const geometryDebug = new THREE.IcosahedronGeometry(64, 64);
+	const geometryDebug = new THREE.IcosahedronGeometry(1, 16);
 	const meshDebug = new THREE.Mesh(geometryDebug, materialDebug);
 	meshDebug.position.set(0, 3, 0);
-	meshDebug.scale.set(0.01, 0.01, 0.01);
 	scene.add(meshDebug);
 
 	function render() {
@@ -165,7 +164,7 @@ async function main() {
 		skydomsunX: 0.1,
 		skydomsunY: 0.2,
 		skydomsunZ: 0.3,
-		skydomNegv: 0.3,
+		skydomNevg: 0.3,
 	};
 	const pane = new Pane({
 		title: "Settings",
@@ -274,6 +273,7 @@ async function main() {
 		.on("change", (ev) => {
 			sunDirection.x = ev.value;
 			skydome.setSunDirection(sunDirection);
+			updateCompute = computeSkydom(skydomNevg, sunDirection).compute(count);
 		});
 
 	pane
@@ -286,6 +286,7 @@ async function main() {
 		.on("change", (ev) => {
 			sunDirection.y = ev.value;
 			skydome.setSunDirection(sunDirection);
+			updateCompute = computeSkydom(skydomNevg, sunDirection).compute(count);
 		});
 
 	pane
@@ -298,18 +299,20 @@ async function main() {
 		.on("change", (ev) => {
 			sunDirection.z = ev.value;
 			skydome.setSunDirection(sunDirection);
+			updateCompute = computeSkydom(skydomNevg, sunDirection).compute(count);
 		});
 
 	pane
-		.addBinding(PARAMS, "skydomNegv", {
-			label: "Negv",
+		.addBinding(PARAMS, "skydomNevg", {
+			label: "Nevg",
 			min: 0.2,
 			max: 1,
 			step: 0.01,
 		})
 		.on("change", (ev) => {
-			skydome.setNevg(ev.value);
-			updateCompute = computeSkydom(ev.value).compute(count);
+			skydomNevg = ev.value;
+			skydome.setNevg(skydomNevg);
+			updateCompute = computeSkydom(skydomNevg, sunDirection).compute(count);
 		});
 }
 
