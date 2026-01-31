@@ -3,7 +3,6 @@ import "./style.css";
 import * as THREE from "three/webgpu";
 import { Inspector } from "three/examples/jsm/inspector/Inspector.js";
 import { DXFLoader } from "./dxf-countour-loader.js";
-import { Skydome } from "./skydome.js";
 import { MapControls } from "three/examples/jsm/controls/MapControls.js";
 import { Pane } from "tweakpane";
 import {
@@ -13,11 +12,11 @@ import {
 import { Ground } from "./ground.js";
 import {
 	initGeometry,
-	computeSkydom,
-	irradienceTexture,
+	computeLuminance,
 	computeTexture,
-} from "./irradiance-cubemap.js";
-import { SkydomeMesh } from "./skydome-mesh.js";
+	luminanceTexture,
+} from "./luminance-texture.js";
+import { Skydome } from "./skydome.js";
 
 async function main() {
 	const canvas = document.querySelector("#canvas");
@@ -29,6 +28,7 @@ async function main() {
 	renderer.shadowMap.enabled = true;
 	renderer.shadowMap.type = THREE.VSMShadowMap;
 	document.body.appendChild(renderer.domElement);
+
 	renderer.inspector = new Inspector();
 	document.body.appendChild(renderer.inspector.domElement);
 
@@ -96,9 +96,14 @@ async function main() {
 	let sunDirection = new THREE.Vector3(0.1, 0.2, 0.3);
 	let skydomNevg = 0.75;
 
-	const skydome = new Skydome(sunDirection, skydomNevg);
-
-	const skydomeMesh = new SkydomeMesh(skydome, 64, 64, 0x29a1ff, 0x2c2c2d);
+	const skydomeMesh = new Skydome(
+		sunDirection,
+		skydomNevg,
+		64,
+		64,
+		0x29a1ff,
+		0x2c2c2d,
+	);
 	skydomeMesh.setCamera(camera);
 	skydomeMesh.setScene(scene);
 	scene.add(camera);
@@ -119,10 +124,13 @@ async function main() {
 
 	// compute shader init
 	const count = initGeometry(64, 64);
-	let updateCompute = computeSkydom(skydomNevg, sunDirection).compute(count);
+	let updateComputeLuminance = computeLuminance(
+		skydomNevg,
+		sunDirection,
+	).compute(count);
 	const updateComputeTexture = computeTexture().compute(count);
 
-	// debug sphere for compute shader
+	// debug icosahedron for compute shader
 	const materialDebug = new THREE.MeshBasicNodeMaterial({
 		color: 0x00ff00,
 	});
@@ -143,12 +151,14 @@ async function main() {
 			camera.updateProjectionMatrix();
 		}
 
-		renderer.compute(updateCompute);
+		renderer.compute(updateComputeLuminance);
 		renderer.compute(updateComputeTexture);
-		materialDebug.colorNode = irradienceTexture;
+		materialDebug.colorNode = luminanceTexture;
 
 		renderer.render(scene, camera);
 	}
+
+	// SETTINGS
 
 	const PARAMS = {
 		shadows: true,
@@ -272,8 +282,11 @@ async function main() {
 		})
 		.on("change", (ev) => {
 			sunDirection.x = ev.value;
-			skydome.setSunDirection(sunDirection);
-			updateCompute = computeSkydom(skydomNevg, sunDirection).compute(count);
+			skydomeMesh.setSunDirection(sunDirection);
+			updateComputeLuminance = computeSkydomLuminance(
+				skydomNevg,
+				sunDirection,
+			).compute(count);
 		});
 
 	pane
@@ -285,8 +298,11 @@ async function main() {
 		})
 		.on("change", (ev) => {
 			sunDirection.y = ev.value;
-			skydome.setSunDirection(sunDirection);
-			updateCompute = computeSkydom(skydomNevg, sunDirection).compute(count);
+			skydomeMesh.setSunDirection(sunDirection);
+			updateComputeLuminance = computeSkydomLuminance(
+				skydomNevg,
+				sunDirection,
+			).compute(count);
 		});
 
 	pane
@@ -298,8 +314,11 @@ async function main() {
 		})
 		.on("change", (ev) => {
 			sunDirection.z = ev.value;
-			skydome.setSunDirection(sunDirection);
-			updateCompute = computeSkydom(skydomNevg, sunDirection).compute(count);
+			skydomeMesh.setSunDirection(sunDirection);
+			updateComputeLuminance = computeSkydomLuminance(
+				skydomNevg,
+				sunDirection,
+			).compute(count);
 		});
 
 	pane
@@ -311,8 +330,11 @@ async function main() {
 		})
 		.on("change", (ev) => {
 			skydomNevg = ev.value;
-			skydome.setNevg(skydomNevg);
-			updateCompute = computeSkydom(skydomNevg, sunDirection).compute(count);
+			skydomeMesh.setNevg(skydomNevg);
+			updateComputeLuminance = computeSkydomLuminance(
+				skydomNevg,
+				sunDirection,
+			).compute(count);
 		});
 }
 
