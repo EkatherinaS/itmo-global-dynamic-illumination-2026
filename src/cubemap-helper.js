@@ -1,4 +1,18 @@
-import { vec3, Fn, uvec2, array, If, float, uint, int } from "three/tsl";
+import {
+	vec3,
+	Fn,
+	uvec2,
+	array,
+	If,
+	float,
+	uint,
+	int,
+	positionLocal,
+	abs,
+	max,
+	vec2,
+	not,
+} from "three/tsl";
 
 // +x -x +y -y +z -z
 
@@ -102,4 +116,60 @@ export const getFace = Fn(({ index, segmentWidth, segmentHeight }) => {
 		});
 
 	return face;
+});
+
+export const getUVForLocalPosition = Fn(({ width, height }) => {
+	const p = positionLocal;
+	const pPos = vec3(abs(p.x), abs(p.y), abs(p.z));
+	const maxCoord = max(max(pPos.x, pPos.y), pPos.z);
+
+	const w = float(width);
+	const h = float(height);
+	const r = float(width).div(2);
+
+	let indexUV = vec2(0, 0);
+
+	If(pPos.x.equal(maxCoord).and(not(p.x.equal(pPos.x))), () => {
+		const t = r.div(p.x);
+		const indX = p.z.mul(t).add(r);
+		const indY = p.y.mul(-1).mul(t).add(r);
+		indexUV.assign(getUVOnFace(0, indX, indY, w, h));
+	});
+
+	If(pPos.x.equal(maxCoord).and(not(p.x.notEqual(pPos.x))), () => {
+		const t = r.div(p.x);
+		const indX = p.z.mul(t).add(r);
+		const indY = p.y.mul(t).add(r);
+		indexUV.assign(getUVOnFace(1, indX, indY, w, h));
+	});
+
+	If(pPos.y.equal(maxCoord).and(p.y.equal(pPos.y)), () => {
+		const t = r.div(p.y);
+		const indX = p.x.mul(-1).mul(t).add(r);
+		const indY = p.z.mul(-1).mul(t).add(r);
+		indexUV.assign(getUVOnFace(2, indX, indY, w, h));
+	});
+
+	If(pPos.y.equal(maxCoord).and(p.y.notEqual(pPos.y)), () => {
+		const t = r.div(p.y);
+		const indX = p.x.mul(t).add(r);
+		const indY = p.z.mul(-1).mul(t).add(r);
+		indexUV.assign(getUVOnFace(3, indX, indY, w, h));
+	});
+
+	If(pPos.z.equal(maxCoord).and(p.z.equal(pPos.z)), () => {
+		const t = r.div(p.z);
+		const indX = p.x.mul(-1).mul(t).add(r);
+		const indY = p.y.mul(t).add(r);
+		indexUV.assign(getUVOnFace(4, indX, indY, w, h));
+	});
+
+	If(pPos.z.equal(maxCoord).and(p.z.notEqual(pPos.z)), () => {
+		const t = r.div(p.z);
+		const indX = p.x.mul(-1).mul(t).add(r);
+		const indY = p.y.mul(-1).mul(t).add(r);
+		indexUV.assign(getUVOnFace(5, indX, indY, w, h));
+	});
+
+	return indexUV;
 });

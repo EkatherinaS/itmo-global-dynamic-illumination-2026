@@ -4,7 +4,8 @@ import {
 	instanceIndex,
 	Fn,
 	color,
-	vec2,
+	uint,
+	Loop,
 	float,
 	texture,
 	textureStore,
@@ -13,14 +14,13 @@ import {
 	cos,
 	sin,
 	sqrt,
-	positionLocal,
-	abs,
-	max,
-	If,
-	not,
 	textureLoad,
 } from "three/tsl";
-import { getCoordinatesOnFace, getUVOnFace } from "./cubemap-helper";
+import {
+	getCoordinatesOnFace,
+	getUVForLocalPosition,
+	getUVOnFace,
+} from "./cubemap-helper";
 import {
 	HEIGHT,
 	WIDTH,
@@ -140,12 +140,12 @@ export const computeLuminanceCubemap = Fn(({ nevg, sunDir }) => {
 	let color, indexUV;
 	const w = float(WIDTH);
 	const h = float(HEIGHT);
-
-	for (let face = 0; face < 6; face++) {
+	Loop(6, ({ i }) => {
+		const face = uint(i);
 		color = getColorOnSide(nevg, sunDir, face);
 		indexUV = getUVOnFace(face, indX, indY, w, h);
 		textureStore(luminanceStorageCubemap, indexUV, color).toReadWrite();
-	}
+	});
 });
 
 const getColorOnSide = Fn(({ nevg, sunDir, face }) => {
@@ -161,7 +161,7 @@ const getColorOnSide = Fn(({ nevg, sunDir, face }) => {
 
 	const sunDirection = vec3(sunDir.x, sunDir.y, sunDir.z);
 	const baseLuminance = getSkyLuminance(position, sunDirection, nevg);
-	const lva = float(baseLuminance).mul(0.0001);
+	const lva = float(baseLuminance).div(WIDTH * HEIGHT * 6);
 
 	const white = color(1.0, 1.0, 1.0, 1.0);
 	const skyColor = white.mul(float(lva));
@@ -169,59 +169,8 @@ const getColorOnSide = Fn(({ nevg, sunDir, face }) => {
 	return skyColor;
 });
 
-export const getColorFromCubemap = Fn(() => {
-	const p = positionLocal;
-	const pPos = vec3(abs(p.x), abs(p.y), abs(p.z));
-	const maxCoord = max(max(pPos.x, pPos.y), pPos.z);
-
-	const w = float(WIDTH);
-	const h = float(HEIGHT);
-	const r = float(WIDTH).div(2);
-
-	let indexUV = vec2(0, 0);
-
-	If(pPos.x.equal(maxCoord).and(not(p.x.equal(pPos.x))), () => {
-		const t = r.div(p.x);
-		const indX = p.z.mul(t).add(r);
-		const indY = p.y.mul(-1).mul(t).add(r);
-		indexUV.assign(getUVOnFace(0, indX, indY, w, h));
-	});
-
-	If(pPos.x.equal(maxCoord).and(not(p.x.notEqual(pPos.x))), () => {
-		const t = r.div(p.x);
-		const indX = p.z.mul(t).add(r);
-		const indY = p.y.mul(t).add(r);
-		indexUV.assign(getUVOnFace(1, indX, indY, w, h));
-	});
-
-	If(pPos.y.equal(maxCoord).and(p.y.equal(pPos.y)), () => {
-		const t = r.div(p.y);
-		const indX = p.x.mul(-1).mul(t).add(r);
-		const indY = p.z.mul(-1).mul(t).add(r);
-		indexUV.assign(getUVOnFace(2, indX, indY, w, h));
-	});
-
-	If(pPos.y.equal(maxCoord).and(p.y.notEqual(pPos.y)), () => {
-		const t = r.div(p.y);
-		const indX = p.x.mul(t).add(r);
-		const indY = p.z.mul(t).add(r);
-		indexUV.assign(getUVOnFace(3, indX, indY, w, h));
-	});
-
-	If(pPos.z.equal(maxCoord).and(p.z.equal(pPos.z)), () => {
-		const t = r.div(p.z);
-		const indX = p.x.mul(-1).mul(t).add(r);
-		const indY = p.y.mul(t).add(r);
-		indexUV.assign(getUVOnFace(4, indX, indY, w, h));
-	});
-
-	If(pPos.z.equal(maxCoord).and(p.z.notEqual(pPos.z)), () => {
-		const t = r.div(p.z);
-		const indX = p.x.mul(-1).mul(t).add(r);
-		const indY = p.y.mul(-1).mul(t).add(r);
-		indexUV.assign(getUVOnFace(5, indX, indY, w, h));
-	});
-
+export const getLuminanceColor = Fn(() => {
+	const indexUV = getUVForLocalPosition(WIDTH, HEIGHT);
 	return textureLoad(luminanceStorageCubemap, indexUV);
 });
 

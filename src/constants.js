@@ -1,7 +1,7 @@
 import * as THREE from "three/webgpu";
 
-export const WIDTH = 12;
-export const HEIGHT = 12;
+export const WIDTH = 32;
+export const HEIGHT = 32;
 
 export const luminanceStorageTexture = new THREE.StorageTexture(WIDTH, HEIGHT);
 export const luminanceStorageCubemap = new THREE.StorageTexture(
