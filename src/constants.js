@@ -8,7 +8,7 @@ export const luminanceStorageCubemap = new THREE.StorageTexture(
 	4 * WIDTH,
 	3 * HEIGHT,
 );
-export const irradienceStorageCubemap = new THREE.StorageTexture(
+export const irradianceStorageCubemap = new THREE.StorageTexture(
 	4 * WIDTH,
 	3 * HEIGHT,
 );

@@ -22,7 +22,7 @@ import {
 import {
 	HEIGHT,
 	WIDTH,
-	irradienceStorageCubemap,
+	irradianceStorageCubemap,
 	luminanceStorageCubemap,
 } from "./constants";
 import {
@@ -34,11 +34,11 @@ import {
 
 // MANY THREADS WITH ATOMIC ADD AND PRECALC FOR ANGLES
 
-const irradienceBuffer = instancedArray(12 * HEIGHT * WIDTH, "uint").toAtomic();
+const irradianceBuffer = instancedArray(12 * HEIGHT * WIDTH, "uint").toAtomic();
 const correction = 1e6;
 
 // launch compute with (12 * HEIGHT * WIDTH)^2 threads
-export const computeIrradienceCubemapToBuffer = Fn(() => {
+export const computeIrradianceCubemapToBuffer = Fn(() => {
 	const w = float(WIDTH);
 	const h = float(HEIGHT);
 	const r = float(WIDTH).div(2);
@@ -46,7 +46,7 @@ export const computeIrradienceCubemapToBuffer = Fn(() => {
 
 	// normalDir & lightDir are radius vectors
 
-	// big squares - normal & irradience
+	// big squares - normal & irradiance
 	const normalIndex = uint(instanceIndex.div(size));
 	const normalIndX = normalIndex.mod(w);
 	const normalIndY = normalIndex.div(w.mul(4)).mod(h);
@@ -73,17 +73,17 @@ export const computeIrradienceCubemapToBuffer = Fn(() => {
 		// so...  cos(phi) = A*B / |A|*|B|
 		const dotProduct = dot(normalDir, lightDir);
 		const cosPhi = dotProduct.div(normalLen).div(lightLen);
-		const irradience = max(float(0), cosPhi.mul(luminance));
+		const irradiance = max(float(0), cosPhi.mul(luminance));
 
 		atomicAdd(
-			irradienceBuffer.element(normalIndex),
-			irradience.mul(correction),
+			irradianceBuffer.element(normalIndex),
+			irradiance.mul(correction),
 		);
 	});
 });
 
 // launch compute with 12 * HEIGHT * WIDTH threads
-export const computeIrradienceCubemapFromBuffer = Fn(() => {
+export const computeIrradianceCubemapFromBuffer = Fn(() => {
 	const w = float(WIDTH);
 	const h = float(HEIGHT);
 	const size = WIDTH * HEIGHT * 6;
@@ -92,12 +92,12 @@ export const computeIrradienceCubemapFromBuffer = Fn(() => {
 	const v = instanceIndex.div(w.mul(4)).mod(h.mul(3));
 	const indexUV = uvec2(u, v);
 
-	const irradience = atomicLoad(irradienceBuffer.element(instanceIndex));
+	const irradiance = atomicLoad(irradianceBuffer.element(instanceIndex));
 	const white = color(1.0, 1.0, 1.0, 1.0);
 	textureStore(
-		irradienceStorageCubemap,
+		irradianceStorageCubemap,
 		indexUV,
-		white.mul(irradience).div(correction).div(size),
+		white.mul(irradiance).div(correction).div(size),
 	).toReadWrite();
 });
 
@@ -136,7 +136,7 @@ export const computeLightBuffer = Fn(() => {
 });
 
 // launch compute with 12 * HEIGHT * WIDTH threads
-export const computeIrradienceCubemapFromLightBuffer = Fn(() => {
+export const computeIrradianceCubemapFromLightBuffer = Fn(() => {
 	const indX = instanceIndex.mod(WIDTH);
 	const indY = instanceIndex.div(WIDTH * 4).mod(HEIGHT);
 
@@ -146,7 +146,7 @@ export const computeIrradienceCubemapFromLightBuffer = Fn(() => {
 	const face = float(getFace(instanceIndex, WIDTH, HEIGHT));
 
 	If(uint(face).greaterThanEqual(0), () => {
-		// computing irradienceCubemap[indX, indY]
+		// computing irradianceCubemap[indX, indY]
 
 		const normalDir = getCoordinatesOnFace(face, indX, indY, r);
 		const normalLen = distance(normalDir, vec3(0));
@@ -156,17 +156,17 @@ export const computeIrradienceCubemapFromLightBuffer = Fn(() => {
 		Loop(HEIGHT, WIDTH, 6, ({ i, j, k }) => {
 			const ind = uint(k).mul(w).mul(h).add(float(i).mul(w)).add(float(j));
 			const lightValue = lightBuffer.element(ind);
-			const irradience = max(
+			const irradiance = max(
 				float(0),
 				dot(normalDir, lightValue).div(normalLen),
 			);
-			result.addAssign(irradience);
+			result.addAssign(irradiance);
 		});
 
 		//const ind = uint(face).mul(WIDTH * HEIGHT).add(indY.mul(WIDTH)).add(indX);
 		const indexUV = getUVOnFace(face, indX, indY, w, h);
 		textureStore(
-			irradienceStorageCubemap,
+			irradianceStorageCubemap,
 			indexUV,
 			result.div(WIDTH * HEIGHT),
 		).toReadWrite();
@@ -176,7 +176,7 @@ export const computeIrradienceCubemapFromLightBuffer = Fn(() => {
 // BIG LOOP FOR EACH ELEMENT
 
 // launch compute with 12 * HEIGHT * WIDTH threads
-export const computeIrradienceCubemapWithLoop = Fn(() => {
+export const computeIrradianceCubemapWithLoop = Fn(() => {
 	const indX = instanceIndex.mod(WIDTH);
 	const indY = instanceIndex.div(WIDTH * 4).mod(HEIGHT);
 
@@ -186,7 +186,7 @@ export const computeIrradienceCubemapWithLoop = Fn(() => {
 	const face = float(getFace(instanceIndex, WIDTH, HEIGHT));
 
 	If(uint(face).greaterThanEqual(0), () => {
-		// computing irradienceCubemap[indX, indY]
+		// computing irradianceCubemap[indX, indY]
 
 		const normalDir = getCoordinatesOnFace(face, indX, indY, r);
 		const normalLen = distance(normalDir, vec3(0));
@@ -210,23 +210,23 @@ export const computeIrradienceCubemapWithLoop = Fn(() => {
 			const cosPhi = dotProduct.div(normalLen).div(lightLen);
 			const valueUV = getUVOnFace(face, indX, indY, w, h);
 			const value = textureLoad(luminanceStorageCubemap, valueUV);
-			const irradience = max(float(0), cosPhi.mul(value));
-			result.addAssign(irradience);
+			const irradiance = max(float(0), cosPhi.mul(value));
+			result.addAssign(irradiance);
 		});
 
 		const white = color(1.0, 1.0, 1.0, 1.0);
 		const indexUV = getUVOnFace(face, indX, indY, w, h);
-		const irradience = white.mul(result).div(WIDTH * HEIGHT * 6);
+		const irradiance = white.mul(result).div(WIDTH * HEIGHT * 6);
 
-		textureStore(irradienceStorageCubemap, indexUV, irradience).toReadWrite();
+		textureStore(irradianceStorageCubemap, indexUV, irradiance).toReadWrite();
 	});
 });
 
-export const getIrradienceColor = Fn(() => {
+export const getIrradianceColor = Fn(() => {
 	const indexUV = getUVForLocalPosition(WIDTH, HEIGHT);
-	return textureLoad(irradienceStorageCubemap, indexUV);
+	return textureLoad(irradianceStorageCubemap, indexUV);
 });
 
-export function getIrradienceTexture() {
-	return texture(irradienceStorageCubemap);
+export function getIrradianceTexture() {
+	return texture(irradianceStorageCubemap);
 }

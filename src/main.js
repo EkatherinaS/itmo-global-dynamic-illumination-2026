@@ -18,11 +18,11 @@ import {
 } from "./luminance-texture.js";
 import { Skydome } from "./skydome.js";
 import {
-	computeIrradienceCubemapFromLightBuffer,
-	getIrradienceTexture,
+	computeIrradianceCubemapFromLightBuffer,
+	getIrradianceTexture,
 	computeLightBuffer,
-	getIrradienceColor,
-} from "./irradience-texture.js";
+	getIrradianceColor,
+} from "./irradiance-texture.js";
 import { HEIGHT, WIDTH } from "./constants";
 
 async function main() {
@@ -147,14 +147,14 @@ async function main() {
 		).compute(12 * WIDTH * HEIGHT);
 
 		let updateLightBuffer = computeLightBuffer().compute(12 * WIDTH * HEIGHT);
-		let updateIrradienceCubemap =
-			computeIrradienceCubemapFromLightBuffer().compute(12 * WIDTH * HEIGHT);
+		let updateIrradianceCubemap =
+			computeIrradianceCubemapFromLightBuffer().compute(12 * WIDTH * HEIGHT);
 
 		renderer.compute(updateComputeTexture);
 		renderer.compute(updateComputeCubemap);
 
 		renderer.compute(updateLightBuffer);
-		renderer.compute(updateIrradienceCubemap);
+		renderer.compute(updateIrradianceCubemap);
 	}
 
 	updateCompute();
@@ -171,17 +171,17 @@ async function main() {
 	icosahedronLuminance.position.set(1.5, 3, 0);
 	scene.add(icosahedronLuminance);
 
-	// debug icosahedron for irradience
-	const icosahedromMaterialIrradience = new THREE.MeshBasicNodeMaterial({
+	// debug icosahedron for irradiance
+	const icosahedromMaterialIrradiance = new THREE.MeshBasicNodeMaterial({
 		color: 0x00ff00,
 	});
-	const icosahedronGeometryIrradience = new THREE.IcosahedronGeometry(1, 64);
-	const icosahedronIrradience = new THREE.Mesh(
-		icosahedronGeometryIrradience,
-		icosahedromMaterialIrradience,
+	const icosahedronGeometryIrradiance = new THREE.IcosahedronGeometry(1, 64);
+	const icosahedronIrradiance = new THREE.Mesh(
+		icosahedronGeometryIrradiance,
+		icosahedromMaterialIrradiance,
 	);
-	icosahedronIrradience.position.set(-1.5, 3, 0);
-	scene.add(icosahedronIrradience);
+	icosahedronIrradiance.position.set(-1.5, 3, 0);
+	scene.add(icosahedronIrradiance);
 
 	// debug plane for compute shader
 	const materialLuminance = new THREE.MeshBasicNodeMaterial({
@@ -191,13 +191,13 @@ async function main() {
 	const meshLuminance = new THREE.Mesh(geometryLuminance, materialLuminance);
 	camera.add(meshLuminance);
 
-	const materialIrradience = new THREE.MeshBasicNodeMaterial({
+	const materialIrradiance = new THREE.MeshBasicNodeMaterial({
 		color: 0x00ff00,
 	});
-	const geometryIrradience = new THREE.PlaneGeometry(0.004, 0.003);
-	const meshIrradience = new THREE.Mesh(geometryIrradience, materialIrradience);
+	const geometryIrradiance = new THREE.PlaneGeometry(0.004, 0.003);
+	const meshIrradiance = new THREE.Mesh(geometryIrradiance, materialIrradiance);
 
-	camera.add(meshIrradience);
+	camera.add(meshIrradiance);
 	scene.add(camera);
 
 	function render() {
@@ -210,14 +210,14 @@ async function main() {
 			renderer.setSize(window.innerWidth, window.innerHeight);
 			camera.aspect = window.innerWidth / window.innerHeight;
 			meshLuminance.position.set(-camera.aspect * 0.005, -0.0005, -0.011);
-			meshIrradience.position.set(-camera.aspect * 0.005, -0.004, -0.011);
+			meshIrradiance.position.set(-camera.aspect * 0.005, -0.004, -0.011);
 			camera.updateProjectionMatrix();
 		}
 
 		materialLuminance.colorNode = getLuminanceCubemap();
-		materialIrradience.colorNode = getIrradienceTexture();
+		materialIrradiance.colorNode = getIrradianceTexture();
 		icosahedromMaterialLuminance.colorNode = getLuminanceColor();
-		icosahedromMaterialIrradience.colorNode = getIrradienceColor();
+		icosahedromMaterialIrradiance.colorNode = getIrradianceColor();
 
 		renderer.render(scene, camera);
 	}
