@@ -11,14 +11,24 @@ import {
 } from "three/examples/jsm/Addons.js";
 import { Ground } from "./ground.js";
 import {
-	initGeometry,
-	computeLuminance,
-	computeTexture,
-	luminanceTexture,
+	computeLuminanceTexture,
+	computeLuminanceCubemap,
+	getLuminanceCubemap,
+	getLuminanceColor,
 } from "./luminance-texture.js";
 import { Skydome } from "./skydome.js";
+import {
+	computeIrradianceCubemapFromLightBuffer,
+	getIrradianceTexture,
+	computeLightBuffer,
+	getIrradianceColor,
+} from "./irradiance-texture.js";
+import { HEIGHT, WIDTH } from "./constants";
 
 async function main() {
+	const adapter = await navigator.gpu.requestAdapter();
+	if (adapter) console.log(adapter.limits);
+
 	const canvas = document.querySelector("#canvas");
 
 	const renderer = new THREE.WebGPURenderer({ canvas, antialias: true });
@@ -33,6 +43,9 @@ async function main() {
 	document.body.appendChild(renderer.inspector.domElement);
 
 	const scene = new THREE.Scene();
+
+	const axesHelper = new THREE.AxesHelper(3);
+	scene.add(axesHelper);
 
 	const camera = new THREE.PerspectiveCamera();
 	camera.fov = 60;
@@ -106,7 +119,6 @@ async function main() {
 	);
 	skydomeMesh.setCamera(camera);
 	skydomeMesh.setScene(scene);
-	scene.add(camera);
 
 	const ground = new Ground(50, 64, 0x2c2c2d);
 	ground.setScene(scene);
@@ -122,22 +134,71 @@ async function main() {
 		render();
 	}
 
-	// compute shader init
-	const count = initGeometry(64, 64);
-	let updateComputeLuminance = computeLuminance(
-		skydomNevg,
-		sunDirection,
-	).compute(count);
-	const updateComputeTexture = computeTexture().compute(count);
+	// compute shader
+	function updateCompute() {
+		let updateComputeTexture = computeLuminanceTexture(
+			skydomNevg,
+			sunDirection,
+		).compute(WIDTH * HEIGHT);
 
-	// debug icosahedron for compute shader
-	const materialDebug = new THREE.MeshBasicNodeMaterial({
+		let updateComputeCubemap = computeLuminanceCubemap(
+			skydomNevg,
+			sunDirection,
+		).compute(12 * WIDTH * HEIGHT);
+
+		let updateLightBuffer = computeLightBuffer().compute(12 * WIDTH * HEIGHT);
+		let updateIrradianceCubemap =
+			computeIrradianceCubemapFromLightBuffer().compute(12 * WIDTH * HEIGHT);
+
+		renderer.compute(updateComputeTexture);
+		renderer.compute(updateComputeCubemap);
+
+		renderer.compute(updateLightBuffer);
+		renderer.compute(updateIrradianceCubemap);
+	}
+
+	updateCompute();
+
+	// debug icosahedron for luminance
+	const icosahedromMaterialLuminance = new THREE.MeshBasicNodeMaterial({
 		color: 0x00ff00,
 	});
-	const geometryDebug = new THREE.IcosahedronGeometry(1, 16);
-	const meshDebug = new THREE.Mesh(geometryDebug, materialDebug);
-	meshDebug.position.set(0, 3, 0);
-	scene.add(meshDebug);
+	const icosahedronGeometryLuminance = new THREE.IcosahedronGeometry(1, 64);
+	const icosahedronLuminance = new THREE.Mesh(
+		icosahedronGeometryLuminance,
+		icosahedromMaterialLuminance,
+	);
+	icosahedronLuminance.position.set(1.5, 3, 0);
+	scene.add(icosahedronLuminance);
+
+	// debug icosahedron for irradiance
+	const icosahedromMaterialIrradiance = new THREE.MeshBasicNodeMaterial({
+		color: 0x00ff00,
+	});
+	const icosahedronGeometryIrradiance = new THREE.IcosahedronGeometry(1, 64);
+	const icosahedronIrradiance = new THREE.Mesh(
+		icosahedronGeometryIrradiance,
+		icosahedromMaterialIrradiance,
+	);
+	icosahedronIrradiance.position.set(-1.5, 3, 0);
+	scene.add(icosahedronIrradiance);
+
+	// debug plane for compute shader
+	const materialLuminance = new THREE.MeshBasicNodeMaterial({
+		color: 0x00ff00,
+	});
+	const geometryLuminance = new THREE.PlaneGeometry(0.004, 0.003);
+	const meshLuminance = new THREE.Mesh(geometryLuminance, materialLuminance);
+	camera.add(meshLuminance);
+
+	const materialIrradiance = new THREE.MeshBasicNodeMaterial({
+		color: 0x00ff00,
+	});
+	const geometryIrradiance = new THREE.PlaneGeometry(0.004, 0.003);
+	const meshIrradiance = new THREE.Mesh(geometryIrradiance, materialIrradiance);
+
+	camera.add(meshIrradiance);
+	scene.add(camera);
 
 	function render() {
 		const canvas = renderer.domElement;
@@ -148,12 +209,15 @@ async function main() {
 		if (needResize) {
 			renderer.setSize(window.innerWidth, window.innerHeight);
 			camera.aspect = window.innerWidth / window.innerHeight;
+			meshLuminance.position.set(-camera.aspect * 0.005, -0.0005, -0.011);
+			meshIrradiance.position.set(-camera.aspect * 0.005, -0.004, -0.011);
 			camera.updateProjectionMatrix();
 		}
 
-		renderer.compute(updateComputeLuminance);
-		renderer.compute(updateComputeTexture);
-		materialDebug.colorNode = luminanceTexture;
+		materialLuminance.colorNode = getLuminanceCubemap();
+		materialIrradiance.colorNode = getIrradianceTexture();
+		icosahedromMaterialLuminance.colorNode = getLuminanceColor();
+		icosahedromMaterialIrradiance.colorNode = getIrradianceColor();
 
 		renderer.render(scene, camera);
 	}
@@ -283,10 +347,7 @@ async function main() {
 		.on("change", (ev) => {
 			sunDirection.x = ev.value;
 			skydomeMesh.setSunDirection(sunDirection);
-			updateComputeLuminance = computeSkydomLuminance(
-				skydomNevg,
-				sunDirection,
-			).compute(count);
+			updateCompute();
 		});
 
 	pane
@@ -299,10 +360,7 @@ async function main() {
 		.on("change", (ev) => {
 			sunDirection.y = ev.value;
 			skydomeMesh.setSunDirection(sunDirection);
-			updateComputeLuminance = computeSkydomLuminance(
-				skydomNevg,
-				sunDirection,
-			).compute(count);
+			updateCompute();
 		});
 
 	pane
@@ -315,10 +373,7 @@ async function main() {
 		.on("change", (ev) => {
 			sunDirection.z = ev.value;
 			skydomeMesh.setSunDirection(sunDirection);
-			updateComputeLuminance = computeSkydomLuminance(
-				skydomNevg,
-				sunDirection,
-			).compute(count);
+			updateCompute();
 		});
 
 	pane
@@ -331,10 +386,7 @@ async function main() {
 		.on("change", (ev) => {
 			skydomNevg = ev.value;
 			skydomeMesh.setNevg(skydomNevg);
-			updateComputeLuminance = computeSkydomLuminance(
-				skydomNevg,
-				sunDirection,
-			).compute(count);
+			updateCompute();
 		});
 }
 
