@@ -28,7 +28,7 @@ import {
 import {
 	getCoordinatesOnFace,
 	getFace,
-	getUVForLocalPosition,
+	getUVForLocalNormal,
 	getUVOnFace,
 } from "./cubemap-helper";
 
@@ -223,7 +223,7 @@ export const computeIrradianceCubemapWithLoop = Fn(() => {
 });
 
 export const getIrradianceColor = Fn(() => {
-	const indexUV = getUVForLocalPosition(WIDTH, HEIGHT);
+	const indexUV = getUVForLocalNormal(WIDTH, HEIGHT);
 	return textureLoad(irradianceStorageCubemap, indexUV);
 });
 
