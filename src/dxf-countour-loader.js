@@ -1,5 +1,6 @@
 import * as THREE from "three/webgpu";
 import DxfParser from "dxf-json";
+import { getIrradianceColor } from "./irradiance-texture";
 
 class BoundingBox {
 	constructor(x, y) {
@@ -100,7 +101,7 @@ class Polyline {
 
 		const extrudeSettings = {
 			steps: 1,
-			depth: 40 + Math.random() * 100,
+			depth: 50 + Math.random() * 30,
 			bevelEnabled: true,
 			bevelThickness: 1.2,
 			bevelSegments: 16,
@@ -166,12 +167,8 @@ class Model {
 
 		const group = new THREE.Group();
 		this.polylines.forEach((polyline) => {
-			const color = new THREE.Color();
-			color.setHSL(Math.random(), 1, 0.6);
-			const material = new THREE.MeshPhongMaterial({
-				color: color,
-				flatShading: false,
-			});
+			const material = new THREE.MeshBasicMaterial();
+			material.colorNode = getIrradianceColor();
 
 			const geometry = polyline.getGeometry();
 			geometry.computeVertexNormals();
@@ -213,7 +210,7 @@ export class DXFLoader {
 				}
 			},
 			onProgress,
-			_onError
+			_onError,
 		);
 	}
 }

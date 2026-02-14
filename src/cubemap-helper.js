@@ -12,6 +12,7 @@ import {
 	max,
 	vec2,
 	not,
+	normalWorld,
 } from "three/tsl";
 
 // +x -x +y -y +z -z
@@ -69,8 +70,8 @@ export const getCoordinatesOnFace = Fn(({ face, indX, indY, r }) => {
 
 export const getUVOnFace = Fn(({ face, indX, indY, width, height }) => {
 	const faceUV = faceIndexUV.element(face);
-	const u = int(width).mul(faceUV.x).add(indX);
-	const v = int(height).mul(faceUV.y).add(indY);
+	const u = uint(width).mul(faceUV.x).add(indX);
+	const v = uint(height).mul(faceUV.y).add(indY);
 	return uvec2(u, v);
 });
 
@@ -141,6 +142,65 @@ export const getUVForLocalPosition = Fn(({ width, height }) => {
 		const indX = p.z.mul(t).add(r);
 		const indY = p.y.mul(t).add(r);
 		indexUV.assign(getUVOnFace(1, indX, indY, w, h));
+	});
+
+	If(pPos.y.equal(maxCoord).and(p.y.equal(pPos.y)), () => {
+		const t = r.div(p.y);
+		const indX = p.x.mul(-1).mul(t).add(r);
+		const indY = p.z.mul(-1).mul(t).add(r);
+		indexUV.assign(getUVOnFace(2, indX, indY, w, h));
+	});
+
+	If(pPos.y.equal(maxCoord).and(p.y.notEqual(pPos.y)), () => {
+		const t = r.div(p.y);
+		const indX = p.x.mul(t).add(r);
+		const indY = p.z.mul(-1).mul(t).add(r);
+		indexUV.assign(getUVOnFace(3, indX, indY, w, h));
+	});
+
+	If(pPos.z.equal(maxCoord).and(p.z.equal(pPos.z)), () => {
+		const t = r.div(p.z);
+		const indX = p.x.mul(-1).mul(t).add(r);
+		const indY = p.y.mul(t).add(r);
+		indexUV.assign(getUVOnFace(4, indX, indY, w, h));
+	});
+
+	If(pPos.z.equal(maxCoord).and(p.z.notEqual(pPos.z)), () => {
+		const t = r.div(p.z);
+		const indX = p.x.mul(-1).mul(t).add(r);
+		const indY = p.y.mul(-1).mul(t).add(r);
+		indexUV.assign(getUVOnFace(5, indX, indY, w, h));
+	});
+
+	return indexUV;
+});
+
+export const getUVForLocalNormal = Fn(({ width, height }) => {
+	// to avoid flickering
+	const QUANTIZE = 1.0e6;
+	const p = normalWorld.mul(QUANTIZE).round().div(QUANTIZE);
+
+	const pPos = vec3(abs(p.x), abs(p.y), abs(p.z));
+	const maxCoord = max(max(pPos.x, pPos.y), pPos.z);
+
+	const w = float(width);
+	const h = float(height);
+	const r = float(width).div(2);
+
+	let indexUV = vec2(0, 0);
+
+	If(pPos.x.equal(maxCoord).and(p.x.equal(pPos.x)), () => {
+		const t = r.div(p.x);
+		const indX = p.z.mul(t).add(r);
+		const indY = p.y.mul(t).add(r);
+		indexUV.assign(getUVOnFace(1, indX, indY, w, h));
+	});
+
+	If(pPos.x.equal(maxCoord).and(p.x.notEqual(pPos.x)), () => {
+		const t = r.div(p.x);
+		const indX = p.z.mul(t).add(r);
+		const indY = p.y.mul(-1).mul(t).add(r);
+		indexUV.assign(getUVOnFace(0, indX, indY, w, h));
 	});
 
 	If(pPos.y.equal(maxCoord).and(p.y.equal(pPos.y)), () => {

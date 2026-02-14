@@ -60,7 +60,7 @@ async function main() {
 	controls.target.set(0, 0, 0);
 
 	const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-	scene.add(ambientLight);
+	//scene.add(ambientLight);
 
 	const light = new THREE.DirectionalLight(0xffffff, 2);
 	light.position.set(-1, 6, 1);
@@ -79,11 +79,11 @@ async function main() {
 	light.shadow.camera.near = 1;
 	light.shadow.camera.far = 10;
 
-	scene.add(light);
+	//scene.add(light);
 
 	const helperShadowCamera = new THREE.CameraHelper(light.shadow.camera);
-	scene.add(helperShadowCamera);
 	helperShadowCamera.visible = false;
+	//scene.add(helperShadowCamera);
 
 	const dxfloader = new DXFLoader();
 	const helpers = [];
