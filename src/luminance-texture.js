@@ -18,7 +18,7 @@ import {
 } from "three/tsl";
 import {
 	getCoordinatesOnFace,
-	getUVForLocalPosition,
+	getUVForLocalNormal,
 	getUVOnFace,
 } from "./cubemap-helper";
 import {
@@ -170,7 +170,7 @@ const getColorOnSide = Fn(({ nevg, sunDir, face }) => {
 });
 
 export const getLuminanceColor = Fn(() => {
-	const indexUV = getUVForLocalPosition(WIDTH, HEIGHT);
+	const indexUV = getUVForLocalNormal(WIDTH, HEIGHT);
 	return textureLoad(luminanceStorageCubemap, indexUV);
 });
 
