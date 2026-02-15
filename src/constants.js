@@ -1,22 +1,19 @@
 import * as THREE from "three/webgpu";
 
-export const WIDTH = 4;
-export const HEIGHT = 4;
+export const WIDTH = 16;
+export const HEIGHT = 16;
 
-export const luminanceStorageTexture = new THREE.StorageTexture(WIDTH, HEIGHT, {
-	format: THREE.RGBA16F,
-});
+export const luminanceStorageTexture = new THREE.StorageTexture(WIDTH, HEIGHT);
+luminanceStorageTexture.type = THREE.FloatType;
+
 export const luminanceStorageCubemap = new THREE.StorageTexture(
 	4 * WIDTH,
 	3 * HEIGHT,
-	{
-		format: THREE.RGBA16F,
-	},
 );
+luminanceStorageCubemap.type = THREE.FloatType;
+
 export const irradianceStorageCubemap = new THREE.StorageTexture(
 	4 * WIDTH,
 	3 * HEIGHT,
-	{
-		format: THREE.RGBA16F,
-	},
 );
+irradianceStorageCubemap.type = THREE.FloatType;
