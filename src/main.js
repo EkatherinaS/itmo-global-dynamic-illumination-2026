@@ -6,6 +6,7 @@ import { DXFLoader } from "./dxf-countour-loader.js";
 import { MapControls } from "three/examples/jsm/controls/MapControls.js";
 import { Pane } from "tweakpane";
 import {
+	GLTFLoader,
 	OrbitControls,
 	VertexNormalsHelper,
 } from "three/examples/jsm/Addons.js";
@@ -84,6 +85,28 @@ async function main() {
 	const helperShadowCamera = new THREE.CameraHelper(light.shadow.camera);
 	helperShadowCamera.visible = false;
 	//scene.add(helperShadowCamera);
+
+	const loader = new GLTFLoader();
+	loader.load(
+		//"public/models/gol_quadrado.glb",
+		"public/models/porsche_911.glb",
+		(gltf) => {
+			const model = gltf.scene;
+			const material = new THREE.MeshBasicMaterial();
+			material.colorNode = getIrradianceColor();
+			model.traverse((o) => {
+				if (o.isMesh) o.material = material;
+			});
+			model.position.set(2, 0, 1.5);
+			model.scale.set(0.2, 0.2, 0.2);
+			model.rotateY(-1);
+			scene.add(model);
+		},
+		undefined,
+		(error) => {
+			console.error(error);
+		},
+	);
 
 	const dxfloader = new DXFLoader();
 	const helpers = [];
