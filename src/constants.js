@@ -4,16 +4,17 @@ export const WIDTH = 64;
 export const HEIGHT = 64;
 
 export const luminanceStorageTexture = new THREE.StorageTexture(WIDTH, HEIGHT);
-luminanceStorageTexture.type = THREE.FloatType;
+luminanceStorageTexture.type = THREE.HalfFloatType;
 
 export const luminanceStorageCubemap = new THREE.StorageTexture(
 	4 * WIDTH,
 	3 * HEIGHT,
 );
-luminanceStorageCubemap.type = THREE.FloatType;
+luminanceStorageCubemap.type = THREE.HalfFloatType;
 
 export const irradianceStorageCubemap = new THREE.StorageTexture(
 	4 * WIDTH,
 	3 * HEIGHT,
 );
-irradianceStorageCubemap.type = THREE.FloatType;
+irradianceStorageCubemap.type = THREE.HalfFloatType;
+
