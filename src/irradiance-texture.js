@@ -34,7 +34,7 @@ import {
 
 // MANY THREADS WITH ATOMIC ADD AND PRECALC FOR ANGLES
 
-const irradianceBuffer = instancedArray(12 * HEIGHT * WIDTH, "uint").toAtomic();
+const irradianceBuffer = instancedArray(12 * HEIGHT * WIDTH, "int").toAtomic();
 const correction = 1e6;
 
 // launch compute with (12 * HEIGHT * WIDTH)^2 threads

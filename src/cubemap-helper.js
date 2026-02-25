@@ -7,11 +7,9 @@ import {
 	float,
 	uint,
 	int,
-	positionLocal,
 	abs,
 	max,
 	vec2,
-	not,
 	normalWorld,
 } from "three/tsl";
 

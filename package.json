@@ -6,7 +6,7 @@
 	"dependencies": {
 		"dxf-json": "^0.10.1",
 		"gltfpack": "^0.25.0",
-		"three": "^0.182.0",
+		"three": "^0.183.1",
 		"tweakpane": "^4.0.5"
 	},
 	"devDependencies": {
