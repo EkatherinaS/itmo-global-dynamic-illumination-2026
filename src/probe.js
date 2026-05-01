@@ -72,6 +72,7 @@ export const getLightProbes = (scene, renderer) => {
 				sphericalHarmonics.needsUpdate = true;
 				probePositions.copyArray(positions);
 				probePositions.needsUpdate = true;
+
 				console.log(sphericalHarmonics);
 			}
 

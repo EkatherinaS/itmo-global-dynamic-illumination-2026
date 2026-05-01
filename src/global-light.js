@@ -23,7 +23,7 @@ import {
 } from "three/tsl";
 
 export const computeGlobalLight = Fn(() => {
-	const shCoefficients = storage(sphericalHarmonics, "float", 108);
+	const shCoefficients = storage(sphericalHarmonics, "vec3", 36);
 	const dir = negate(positionLocal.normalize());
 
 	const x = float(dir.x);
@@ -48,19 +48,17 @@ export const computeGlobalLight = Fn(() => {
 	Loop(4, 9, ({ i, j }) => {
 		const probeInd = uint(i);
 		const coefInd = uint(j);
-		const shCoeffs = vec4(
-			shCoefficients.element(probeInd.mul(27).add(coefInd.mul(3).add(0))),
-			shCoefficients.element(probeInd.mul(27).add(coefInd.mul(3).add(1))),
-			shCoefficients.element(probeInd.mul(27).add(coefInd.mul(3).add(2))),
+		const shCoeff = vec4(
+			shCoefficients.element(probeInd.mul(9).add(coefInd)),
 			1.0,
 		);
 		const dist = max(
 			float(1)
 				.div(distance(positionWorld, probes.element(probeInd)))
 				.mul(0.1),
-			0.0001,
+			0.000001,
 		);
-		result.addAssign(shCoeffs.mul(shBasis.element(coefInd)).mul(dist));
+		result.addAssign(shCoeff.mul(shBasis.element(coefInd)).mul(dist));
 	});
 
 	return output.add(result); //vec4(positionWorld.mul(0.01), 1.0);
