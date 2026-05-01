@@ -24,7 +24,15 @@ import {
 	computeLightBuffer,
 	getIrradianceColor,
 } from "./irradiance-texture.js";
-import { HEIGHT, WIDTH } from "./constants";
+import { depthTexture, HEIGHT, sphericalHarmonics, WIDTH } from "./constants";
+import {
+	addProbe,
+	getLightProbes,
+	getProbeCount,
+	updateProbes,
+} from "./probe.js";
+import { computeDepthTextureTest } from "./depth-texture.js";
+import { computeGlobalLight } from "./global-light.js";
 
 async function main() {
 	const adapter = await navigator.gpu.requestAdapter();
@@ -32,12 +40,17 @@ async function main() {
 
 	const canvas = document.querySelector("#canvas");
 
-	const renderer = new THREE.WebGPURenderer({ canvas, antialias: true });
+	const renderer = new THREE.WebGPURenderer({
+		canvas,
+		antialias: true,
+		trackTimestamp: true,
+	});
 	renderer.setPixelRatio(window.devicePixelRatio);
 	renderer.setSize(window.innerWidth, window.innerHeight);
 	renderer.setAnimationLoop(animate);
 	renderer.shadowMap.enabled = true;
-	renderer.shadowMap.type = THREE.VSMShadowMap;
+	renderer.shadowMap.type = THREE.BasicShadowMap;
+	renderer.toneMapping = THREE.NoToneMapping;
 	document.body.appendChild(renderer.domElement);
 
 	renderer.inspector = new Inspector();
@@ -55,6 +68,9 @@ async function main() {
 	camera.far = 256;
 	camera.position.set(0, 10, 0);
 
+	let sunDirection = new THREE.Vector3(0.1, 0.2, 0.3);
+	let skydomNevg = 0.75;
+
 	let controls = new OrbitControls(camera, renderer.domElement);
 	controls.enableDamping = true;
 	controls.dampingFactor = 0.25;
@@ -63,8 +79,8 @@ async function main() {
 	const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 	//scene.add(ambientLight);
 
-	const light = new THREE.DirectionalLight(0xffffff, 2);
-	light.position.set(-1, 6, 1);
+	const light = new THREE.DirectionalLight(0xffffff, 5);
+	light.position.copy(sunDirection);
 	light.castShadow = true;
 
 	light.shadow.radius = 1;
@@ -80,10 +96,10 @@ async function main() {
 	light.shadow.camera.near = 1;
 	light.shadow.camera.far = 10;
 
-	//scene.add(light);
+	scene.add(light);
 
-	const helperShadowCamera = new THREE.CameraHelper(light.shadow.camera);
-	helperShadowCamera.visible = false;
+	//const helperShadowCamera = new THREE.CameraHelper(light.shadow.camera);
+	//helperShadowCamera.visible = false;
 	//scene.add(helperShadowCamera);
 
 	const loader = new GLTFLoader();
@@ -92,8 +108,12 @@ async function main() {
 		"public/models/porsche_911.glb",
 		(gltf) => {
 			const model = gltf.scene;
-			const material = new THREE.MeshBasicMaterial();
-			material.colorNode = getIrradianceColor();
+			//const material = new THREE.MeshBasicMaterial();
+			//material.colorNode = getIrradianceColor();
+			const material = new THREE.MeshPhongMaterial({
+				color: 0xffffff,
+				flatShading: false,
+			});
 			model.traverse((o) => {
 				if (o.isMesh) o.material = material;
 			});
@@ -127,10 +147,16 @@ async function main() {
 			.getCenter(group.position)
 			.multiply(new THREE.Vector3(-1, 0, -1));
 		scene.add(group);
-	});
 
-	let sunDirection = new THREE.Vector3(0.1, 0.2, 0.3);
-	let skydomNevg = 0.75;
+		/*
+        for (let i = -10; i < 10; i++) {
+			for (let j = -10; j < 10; j++) {
+				addProbe(scene, i, 1, j);
+			}
+		}
+        */
+		addProbe(scene, 2.8, 0.3, -2);
+	});
 
 	const skydomeMesh = new Skydome(
 		sunDirection,
@@ -178,11 +204,14 @@ async function main() {
 
 		renderer.compute(updateLightBuffer);
 		renderer.compute(updateIrradianceCubemap);
+
+		updateProbes(scene, renderer);
+		getLightProbes(scene, renderer);
 	}
 
-	updateCompute();
+	// DEBUG SECTION
 
-	// debug icosahedron for luminance
+	// debug icosahedron for Luminance
 	const icosahedromMaterialLuminance = new THREE.MeshBasicNodeMaterial({
 		color: 0x00ff00,
 	});
@@ -194,7 +223,7 @@ async function main() {
 	icosahedronLuminance.position.set(1.5, 3, 0);
 	scene.add(icosahedronLuminance);
 
-	// debug icosahedron for irradiance
+	// debug icosahedron for Irradiance
 	const icosahedromMaterialIrradiance = new THREE.MeshBasicNodeMaterial({
 		color: 0x00ff00,
 	});
@@ -206,7 +235,7 @@ async function main() {
 	icosahedronIrradiance.position.set(-1.5, 3, 0);
 	scene.add(icosahedronIrradiance);
 
-	// debug plane for compute shader
+	// debug plane for Luminance
 	const materialLuminance = new THREE.MeshBasicNodeMaterial({
 		color: 0x00ff00,
 	});
@@ -214,15 +243,28 @@ async function main() {
 	const meshLuminance = new THREE.Mesh(geometryLuminance, materialLuminance);
 	camera.add(meshLuminance);
 
+	// debug plane for Irradiance
 	const materialIrradiance = new THREE.MeshBasicNodeMaterial({
 		color: 0x00ff00,
 	});
 	const geometryIrradiance = new THREE.PlaneGeometry(0.004, 0.003);
 	const meshIrradiance = new THREE.Mesh(geometryIrradiance, materialIrradiance);
-
 	camera.add(meshIrradiance);
-	scene.add(camera);
 
+	// debug camera & plane for depth map
+	const renderTarget = new THREE.RenderTarget(256, 256);
+	renderTarget.depthTexture = depthTexture;
+	const testCamera = new THREE.OrthographicCamera(-10, 10, 8, -8, 1, 10);
+	testCamera.position.set(0, 5, 0);
+	testCamera.lookAt(0, 0, 0);
+	scene.add(testCamera);
+	const material = new THREE.MeshBasicMaterial({
+		map: depthTexture,
+	});
+	const plane = new THREE.Mesh(new THREE.PlaneGeometry(0.004, 0.003), material);
+	camera.add(plane);
+
+	let times = [];
 	function render() {
 		const canvas = renderer.domElement;
 		const width = window.innerWidth;
@@ -234,16 +276,45 @@ async function main() {
 			camera.aspect = window.innerWidth / window.innerHeight;
 			meshLuminance.position.set(-camera.aspect * 0.005, -0.0005, -0.011);
 			meshIrradiance.position.set(-camera.aspect * 0.005, -0.004, -0.011);
+			plane.position.set(-camera.aspect * 0.005, 0.003, -0.011);
 			camera.updateProjectionMatrix();
 		}
+
+		let updateComputeDepthTextureTest = computeDepthTextureTest().compute(
+			12 * WIDTH * HEIGHT,
+		);
+		renderer.compute(updateComputeDepthTextureTest);
 
 		materialLuminance.colorNode = getLuminanceCubemap();
 		materialIrradiance.colorNode = getIrradianceTexture();
 		icosahedromMaterialLuminance.colorNode = getLuminanceColor();
 		icosahedromMaterialIrradiance.colorNode = getIrradianceColor();
 
+		renderer
+			.resolveTimestampsAsync(THREE.TimestampQuery.RENDER)
+			.then((result) => {
+				if (times.length < 100) {
+					times.push(result);
+				} else {
+					let avg = 0;
+					times.forEach((t) => {
+						avg += t;
+					});
+					times = [];
+					console.log(`GPU Render Time: ${avg / 100} ns`);
+				}
+			});
+
+		// debug RenderTarget switches to show depth map
+		renderer.setRenderTarget(renderTarget);
+		renderer.render(scene, testCamera);
+		renderer.setRenderTarget(null);
 		renderer.render(scene, camera);
 	}
+	// END OF DEBUG SECTION
+
+	scene.add(camera);
+	updateCompute();
 
 	// SETTINGS
 
@@ -370,6 +441,7 @@ async function main() {
 		.on("change", (ev) => {
 			sunDirection.x = ev.value;
 			skydomeMesh.setSunDirection(sunDirection);
+			light.position.copy(sunDirection);
 			updateCompute();
 		});
 
@@ -383,6 +455,7 @@ async function main() {
 		.on("change", (ev) => {
 			sunDirection.y = ev.value;
 			skydomeMesh.setSunDirection(sunDirection);
+			light.position.copy(sunDirection);
 			updateCompute();
 		});
 
@@ -396,6 +469,7 @@ async function main() {
 		.on("change", (ev) => {
 			sunDirection.z = ev.value;
 			skydomeMesh.setSunDirection(sunDirection);
+			light.position.copy(sunDirection);
 			updateCompute();
 		});
 

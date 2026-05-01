@@ -1,6 +1,9 @@
 import * as THREE from "three/webgpu";
 import DxfParser from "dxf-json";
 import { getIrradianceColor } from "./irradiance-texture";
+import { computeGlobalLight } from "./global-light";
+import { Fn } from "three/src/nodes/TSL.js";
+import { float, color } from "three/tsl";
 
 class BoundingBox {
 	constructor(x, y) {
@@ -167,14 +170,26 @@ class Model {
 
 		const group = new THREE.Group();
 		this.polylines.forEach((polyline) => {
-			const material = new THREE.MeshBasicMaterial();
-			material.colorNode = getIrradianceColor();
+			const randcolor = new THREE.Color();
+			randcolor.setHSL(Math.random(), 1, 0.6);
+			/*const material = new THREE.MeshPhongMaterial({
+                //color: 0xffffff,
+                color: color,
+                flatShading: false,
+            });*/
+			const material = new THREE.MeshPhongNodeMaterial({
+				color: randcolor,
+				flatShading: false,
+			});
+
+			material.outputNode = computeGlobalLight();
 
 			const geometry = polyline.getGeometry();
 			geometry.computeVertexNormals();
 
 			const mesh = new THREE.Mesh(geometry, material);
 			mesh.castShadow = true;
+			mesh.receiveShadow = true;
 			group.add(mesh);
 		});
 		return group;
