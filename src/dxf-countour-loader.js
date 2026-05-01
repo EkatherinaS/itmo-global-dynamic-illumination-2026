@@ -172,16 +172,10 @@ class Model {
 		this.polylines.forEach((polyline) => {
 			const randcolor = new THREE.Color();
 			randcolor.setHSL(Math.random(), 1, 0.6);
-			/*const material = new THREE.MeshPhongMaterial({
-                //color: 0xffffff,
-                color: color,
-                flatShading: false,
-            });*/
 			const material = new THREE.MeshPhongNodeMaterial({
 				color: randcolor,
 				flatShading: false,
 			});
-
 			material.outputNode = computeGlobalLight();
 
 			const geometry = polyline.getGeometry();

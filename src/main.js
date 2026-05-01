@@ -155,7 +155,11 @@ async function main() {
 			}
 		}
         */
+
 		addProbe(scene, 2.8, 0.3, -2);
+		addProbe(scene, 2.8, 0.3, 2);
+		addProbe(scene, 2.8, 1.3, -2);
+		addProbe(scene, 2.8, 1.3, 2);
 	});
 
 	const skydomeMesh = new Skydome(
