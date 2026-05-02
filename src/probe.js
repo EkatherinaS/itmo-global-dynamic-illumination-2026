@@ -1,7 +1,12 @@
 import * as THREE from "three/webgpu";
 import { LightProbeGenerator } from "../node_modules/three/examples/jsm/lights/LightProbeGenerator.js";
 import { LightProbeHelper } from "three/examples/jsm/helpers/LightProbeHelperGPU.js";
-import { probePositions, sphericalHarmonics } from "./constants.js";
+import {
+	PROBE_COUNT,
+	probePositions,
+	SH_COEFFICIENTS_COUNT,
+	sphericalHarmonics,
+} from "./constants.js";
 
 class Probe {
 	constructor(c, rt) {
@@ -27,10 +32,6 @@ export const addProbe = (scene, x, y, z) => {
 	probes.push(probe);
 };
 
-export const getProbeCount = () => {
-	return probes.length;
-};
-
 export const updateProbes = (scene, renderer) => {
 	probes.forEach((probe) => {
 		probe.camera.update(renderer, scene);
@@ -40,10 +41,9 @@ export const updateProbes = (scene, renderer) => {
 export const getLightProbes = (scene, renderer) => {
 	let count = 0;
 
-	const blockSize = 9 * 3;
-	const probeCount = probes.length;
-	const data = new Float32Array(blockSize * probeCount);
-	const positions = new Float32Array(probeCount * 3);
+	const blockSize = SH_COEFFICIENTS_COUNT * 4;
+	const data = new Float32Array(blockSize * PROBE_COUNT);
+	//const positions = new Float32Array(PROBE_COUNT * 3);
 
 	probes.forEach((probe) => {
 		const promise = LightProbeGenerator.fromCubeRenderTarget(
@@ -56,10 +56,6 @@ export const getLightProbes = (scene, renderer) => {
 			lightprobe.intensity = 2;
 			console.log(lightprobe);
 
-			positions[count * 3 + 0] = lightprobe.position.x;
-			positions[count * 3 + 1] = lightprobe.position.y;
-			positions[count * 3 + 2] = lightprobe.position.z;
-
 			lightprobe.sh.coefficients.forEach((v, i) => {
 				data[count * blockSize + i * 3] = v.x;
 				data[count * blockSize + i * 3 + 1] = v.y;
@@ -70,8 +66,8 @@ export const getLightProbes = (scene, renderer) => {
 			if (count == probes.length) {
 				sphericalHarmonics.copyArray(data);
 				sphericalHarmonics.needsUpdate = true;
-				probePositions.copyArray(positions);
-				probePositions.needsUpdate = true;
+				//probePositions.copyArray(positions);
+				//probePositions.needsUpdate = true;
 
 				console.log(sphericalHarmonics);
 			}

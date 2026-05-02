@@ -9,9 +9,9 @@ import {
 import { depthTexture, depthTextureTest, WIDTH } from "./constants";
 
 export const computeDepthTextureTest = Fn(() => {
-	const indX = instanceIndex.mod(WIDTH * 4);
-	const indY = instanceIndex.div(WIDTH * 4);
+	const indX = instanceIndex.mod(WIDTH);
+	const indY = instanceIndex.div(WIDTH);
 	const indexUV = uvec2(indX, indY);
 	const value = textureLoad(depthTexture, indexUV);
-	textureStore(depthTextureTest, indexUV, float(1).sub(value)).toReadWrite();
+	textureStore(depthTextureTest, indexUV, value).toReadWrite();
 });

@@ -24,15 +24,23 @@ import {
 	computeLightBuffer,
 	getIrradianceColor,
 } from "./irradiance-texture.js";
-import { depthTexture, HEIGHT, sphericalHarmonics, WIDTH } from "./constants";
 import {
-	addProbe,
-	getLightProbes,
-	getProbeCount,
-	updateProbes,
-} from "./probe.js";
-import { computeDepthTextureTest } from "./depth-texture.js";
-import { computeGlobalLight } from "./global-light.js";
+	DEPTH_CAMERA_BOTTOM,
+	DEPTH_CAMERA_LEFT,
+	DEPTH_CAMERA_RIGHT,
+	DEPTH_CAMERA_TOP,
+	DEPTH_HEIGHT,
+	DEPTH_WIDTH,
+	depthTexture,
+	depthTextureTest,
+	HEIGHT,
+	PROBE_COUNT,
+	probePositions,
+	sphericalHarmonics,
+	WIDTH,
+} from "./constants";
+import { addProbe, getLightProbes, updateProbes } from "./probe.js";
+import { computeGlobalLight, computeProbePositions } from "./global-light.js";
 
 async function main() {
 	const adapter = await navigator.gpu.requestAdapter();
@@ -59,7 +67,7 @@ async function main() {
 	const scene = new THREE.Scene();
 
 	const axesHelper = new THREE.AxesHelper(3);
-	scene.add(axesHelper);
+	//scene.add(axesHelper);
 
 	const camera = new THREE.PerspectiveCamera();
 	camera.fov = 60;
@@ -67,17 +75,16 @@ async function main() {
 	camera.near = 0.01;
 	camera.far = 256;
 	camera.position.set(0, 10, 0);
-
-	let sunDirection = new THREE.Vector3(0.1, 0.2, 0.3);
-	let skydomNevg = 0.75;
-
 	let controls = new OrbitControls(camera, renderer.domElement);
 	controls.enableDamping = true;
 	controls.dampingFactor = 0.25;
 	controls.target.set(0, 0, 0);
 
-	const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+	//const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 	//scene.add(ambientLight);
+
+	let sunDirection = new THREE.Vector3(0.1, 0.2, 0.3);
+	let skydomNevg = 0.75;
 
 	const light = new THREE.DirectionalLight(0xffffff, 5);
 	light.position.copy(sunDirection);
@@ -97,6 +104,36 @@ async function main() {
 	light.shadow.camera.far = 10;
 
 	scene.add(light);
+
+	let updateComputeTexture = computeLuminanceTexture(
+		skydomNevg,
+		sunDirection,
+	).compute(WIDTH * HEIGHT);
+	let updateComputeCubemap = computeLuminanceCubemap(
+		skydomNevg,
+		sunDirection,
+	).compute(12 * WIDTH * HEIGHT);
+	let updateLightBuffer = computeLightBuffer().compute(12 * WIDTH * HEIGHT);
+	let updateIrradianceCubemap =
+		computeIrradianceCubemapFromLightBuffer().compute(12 * WIDTH * HEIGHT);
+	let updateProbePositions = computeProbePositions().compute(PROBE_COUNT);
+
+	// debug camera & plane for depth map
+	const renderTarget = new THREE.RenderTarget(DEPTH_WIDTH, DEPTH_HEIGHT);
+	renderTarget.depthTexture = depthTexture;
+	const testCamera = new THREE.OrthographicCamera(
+		DEPTH_CAMERA_LEFT,
+		DEPTH_CAMERA_RIGHT,
+		DEPTH_CAMERA_TOP,
+		DEPTH_CAMERA_BOTTOM,
+		1,
+		10,
+	);
+	testCamera.position.set(0, 5, 0);
+	testCamera.lookAt(0, 0, 0);
+	scene.add(testCamera);
+
+	await renderer.init();
 
 	//const helperShadowCamera = new THREE.CameraHelper(light.shadow.camera);
 	//helperShadowCamera.visible = false;
@@ -130,7 +167,7 @@ async function main() {
 
 	const dxfloader = new DXFLoader();
 	const helpers = [];
-	dxfloader.load("public/models/contours.dxf", function (model) {
+	dxfloader.load("public/models/contours.dxf", async function (model) {
 		const group = model.model;
 		group.position.set(0, 0, 0);
 		group.scale.set(0.01, 0.01, 0.01);
@@ -148,18 +185,35 @@ async function main() {
 			.multiply(new THREE.Vector3(-1, 0, -1));
 		scene.add(group);
 
+		// debug RenderTarget switches to show depth map
+		renderer.setRenderTarget(renderTarget);
+		renderer.render(scene, testCamera);
+		renderer.setRenderTarget(null);
+
+		renderer.compute(updateProbePositions);
+		const bufferArray = await renderer.getArrayBufferAsync(probePositions);
+		const outputData = new Float32Array(bufferArray);
+
+		console.log(outputData);
+
+		for (let i = 0; i < PROBE_COUNT; i++) {
+			addProbe(scene, outputData[i * 4 + 0], 0.4, outputData[i * 4 + 2]);
+		}
+
 		/*
         for (let i = -10; i < 10; i++) {
 			for (let j = -10; j < 10; j++) {
 				addProbe(scene, i, 1, j);
 			}
 		}
-        */
-
+        
 		addProbe(scene, 2.8, 0.3, -2);
 		addProbe(scene, 2.8, 0.3, 2);
 		addProbe(scene, 2.8, 1.3, -2);
 		addProbe(scene, 2.8, 1.3, 2);
+        */
+		updateProbes(scene, renderer);
+		getLightProbes(scene, renderer);
 	});
 
 	const skydomeMesh = new Skydome(
@@ -180,8 +234,6 @@ async function main() {
 	skyHelper.visible = false;
 	scene.add(skyHelper);
 
-	await renderer.init();
-
 	async function animate() {
 		controls.update();
 		render();
@@ -189,23 +241,8 @@ async function main() {
 
 	// compute shader
 	function updateCompute() {
-		let updateComputeTexture = computeLuminanceTexture(
-			skydomNevg,
-			sunDirection,
-		).compute(WIDTH * HEIGHT);
-
-		let updateComputeCubemap = computeLuminanceCubemap(
-			skydomNevg,
-			sunDirection,
-		).compute(12 * WIDTH * HEIGHT);
-
-		let updateLightBuffer = computeLightBuffer().compute(12 * WIDTH * HEIGHT);
-		let updateIrradianceCubemap =
-			computeIrradianceCubemapFromLightBuffer().compute(12 * WIDTH * HEIGHT);
-
 		renderer.compute(updateComputeTexture);
 		renderer.compute(updateComputeCubemap);
-
 		renderer.compute(updateLightBuffer);
 		renderer.compute(updateIrradianceCubemap);
 
@@ -225,7 +262,7 @@ async function main() {
 		icosahedromMaterialLuminance,
 	);
 	icosahedronLuminance.position.set(1.5, 3, 0);
-	scene.add(icosahedronLuminance);
+	//scene.add(icosahedronLuminance);
 
 	// debug icosahedron for Irradiance
 	const icosahedromMaterialIrradiance = new THREE.MeshBasicNodeMaterial({
@@ -237,7 +274,7 @@ async function main() {
 		icosahedromMaterialIrradiance,
 	);
 	icosahedronIrradiance.position.set(-1.5, 3, 0);
-	scene.add(icosahedronIrradiance);
+	//scene.add(icosahedronIrradiance);
 
 	// debug plane for Luminance
 	const materialLuminance = new THREE.MeshBasicNodeMaterial({
@@ -256,16 +293,10 @@ async function main() {
 	camera.add(meshIrradiance);
 
 	// debug camera & plane for depth map
-	const renderTarget = new THREE.RenderTarget(256, 256);
-	renderTarget.depthTexture = depthTexture;
-	const testCamera = new THREE.OrthographicCamera(-10, 10, 8, -8, 1, 10);
-	testCamera.position.set(0, 5, 0);
-	testCamera.lookAt(0, 0, 0);
-	scene.add(testCamera);
 	const material = new THREE.MeshBasicMaterial({
-		map: depthTexture,
+		map: depthTextureTest,
 	});
-	const plane = new THREE.Mesh(new THREE.PlaneGeometry(0.004, 0.003), material);
+	const plane = new THREE.Mesh(new THREE.PlaneGeometry(0.004, 0.004), material);
 	camera.add(plane);
 
 	let times = [];
@@ -280,14 +311,9 @@ async function main() {
 			camera.aspect = window.innerWidth / window.innerHeight;
 			meshLuminance.position.set(-camera.aspect * 0.005, -0.0005, -0.011);
 			meshIrradiance.position.set(-camera.aspect * 0.005, -0.004, -0.011);
-			plane.position.set(-camera.aspect * 0.005, 0.003, -0.011);
+			plane.position.set(-camera.aspect * 0.005, 0.0035, -0.011);
 			camera.updateProjectionMatrix();
 		}
-
-		let updateComputeDepthTextureTest = computeDepthTextureTest().compute(
-			12 * WIDTH * HEIGHT,
-		);
-		renderer.compute(updateComputeDepthTextureTest);
 
 		materialLuminance.colorNode = getLuminanceCubemap();
 		materialIrradiance.colorNode = getIrradianceTexture();
@@ -309,10 +335,6 @@ async function main() {
 				}
 			});
 
-		// debug RenderTarget switches to show depth map
-		renderer.setRenderTarget(renderTarget);
-		renderer.render(scene, testCamera);
-		renderer.setRenderTarget(null);
 		renderer.render(scene, camera);
 	}
 	// END OF DEBUG SECTION
