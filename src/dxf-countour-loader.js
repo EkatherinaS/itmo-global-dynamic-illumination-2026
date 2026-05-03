@@ -176,6 +176,7 @@ class Model {
 				color: randcolor,
 				flatShading: false,
 			});
+			// ENABLE to turn on light from probes
 			material.outputNode = computeGlobalLight();
 
 			const geometry = polyline.getGeometry();

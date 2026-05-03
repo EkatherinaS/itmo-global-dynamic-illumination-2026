@@ -40,7 +40,11 @@ import {
 	WIDTH,
 } from "./constants";
 import { addProbe, getLightProbes, updateProbes } from "./probe.js";
-import { computeGlobalLight, computeProbePositions } from "./global-light.js";
+import {
+	computeRegularGridProbePositions,
+	computeStreetGridProbePositions,
+	debugDepthMap,
+} from "./global-light.js";
 
 async function main() {
 	const adapter = await navigator.gpu.requestAdapter();
@@ -116,7 +120,10 @@ async function main() {
 	let updateLightBuffer = computeLightBuffer().compute(12 * WIDTH * HEIGHT);
 	let updateIrradianceCubemap =
 		computeIrradianceCubemapFromLightBuffer().compute(12 * WIDTH * HEIGHT);
-	let updateProbePositions = computeProbePositions().compute(PROBE_COUNT);
+	// CHANGE to switch between probe grids
+	let updateProbePositions =
+		computeRegularGridProbePositions().compute(PROBE_COUNT);
+	let updateDebugDepthMap = debugDepthMap().compute(DEPTH_WIDTH * DEPTH_HEIGHT);
 
 	// debug camera & plane for depth map
 	const renderTarget = new THREE.RenderTarget(DEPTH_WIDTH, DEPTH_HEIGHT);
@@ -190,14 +197,21 @@ async function main() {
 		renderer.render(scene, testCamera);
 		renderer.setRenderTarget(null);
 
+		renderer.compute(updateDebugDepthMap);
 		renderer.compute(updateProbePositions);
+
 		const bufferArray = await renderer.getArrayBufferAsync(probePositions);
 		const outputData = new Float32Array(bufferArray);
 
 		console.log(outputData);
 
 		for (let i = 0; i < PROBE_COUNT; i++) {
-			addProbe(scene, outputData[i * 4 + 0], 0.4, outputData[i * 4 + 2]);
+			addProbe(
+				scene,
+				outputData[i * 4 + 0],
+				outputData[i * 4 + 1],
+				outputData[i * 4 + 2],
+			);
 		}
 
 		/*

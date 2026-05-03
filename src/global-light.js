@@ -91,7 +91,7 @@ const getCoordsForProbe = Fn(([ind]) => {
 	return vec4(left, right, top, bottom);
 });
 
-const getNeighbouringProbesIndForPosition = Fn(([pos]) => {
+const getNeighbouringProbesStreetGrid = Fn(([pos]) => {
 	const rangeWidth = float(DEPTH_WIDTH).div(GRID_WIDTH);
 	const rangeHeight = float(DEPTH_HEIGHT).div(GRID_HEIGHT);
 
@@ -122,14 +122,78 @@ const getNeighbouringProbesIndForPosition = Fn(([pos]) => {
 	]);
 });
 
-export const computeProbePositions = Fn(() => {
+const getNeighbouringProbesRegularGrid = Fn(([pos]) => {
+	const rangeWidth = float(DEPTH_WIDTH).div(GRID_WIDTH);
+	const rangeHeight = float(DEPTH_HEIGHT).div(GRID_HEIGHT);
+
+	const uv = getDepthUVFromWorldCoords(pos);
+	const i = floor(float(uv.x).div(rangeWidth));
+	const j = floor(float(uv.y).div(rangeHeight));
+
+	const iPair = i.add(1);
+	const jPair = j.add(1);
+
+	const layerSize = float(PROBE_COUNT).div(2);
+
+	return array([
+		j.mul(GRID_WIDTH).add(i),
+		jPair.mul(GRID_WIDTH).add(i),
+		j.mul(GRID_WIDTH).add(iPair),
+		jPair.mul(GRID_WIDTH).add(iPair),
+		j.mul(GRID_WIDTH).add(i).add(layerSize),
+		jPair.mul(GRID_WIDTH).add(i).add(layerSize),
+		j.mul(GRID_WIDTH).add(iPair).add(layerSize),
+		jPair.mul(GRID_WIDTH).add(iPair).add(layerSize),
+	]);
+});
+
+export const debugDepthMap = Fn(() => {
+	const left = instanceIndex.mod(DEPTH_WIDTH);
+	const top = instanceIndex.div(DEPTH_WIDTH);
+
+	const uv = vec2(left, top);
+
+	const pos = getWorldCoordsFromDepthUV(uv);
+	const probeInds = getNeighbouringProbesRegularGrid(pos);
+	const depth = float(textureLoad(depthTexture, uv));
+
+	textureStore(
+		depthTextureTest,
+		uv,
+		vec4(
+			vec3(depth),
+			// probeInds.element(7).div(PROBE_COUNT),
+			// probeInds.element(7).div(PROBE_COUNT),
+			// probeInds.element(7).div(PROBE_COUNT),
+			1.0,
+		),
+	).toReadWrite();
+});
+
+function addProbeDot(gridUV) {
+	const dotWidth = ceil(float(DEPTH_WIDTH).div(64));
+	const dotHeight = ceil(float(DEPTH_HEIGHT).div(64));
+
+	const startX = gridUV.x.sub(floor(dotWidth.div(2)));
+	const startY = gridUV.y.sub(floor(dotHeight.div(2)));
+
+	Loop(dotWidth, dotHeight, ({ i, j }) => {
+		textureStore(
+			depthTextureTest,
+			vec2(startX.add(i), startY.add(j)),
+			vec4(1.0, 0.1, 0.4, 1.0),
+		).toReadWrite();
+	});
+}
+
+export const computeStreetGridProbePositions = Fn(() => {
 	const rangeWidth = float(DEPTH_WIDTH).div(GRID_WIDTH);
 	const rangeHeight = float(DEPTH_HEIGHT).div(GRID_HEIGHT);
 
 	const left = rangeWidth.mul(instanceIndex.mod(GRID_WIDTH));
 	const top = rangeHeight.mul(instanceIndex.div(GRID_WIDTH));
 
-	let probeUV = uvec2(left, top);
+	let gridUV = uvec2(left, top);
 	let minDepth = float(0.0);
 	let chance = float(0);
 
@@ -140,37 +204,50 @@ export const computeProbePositions = Fn(() => {
 		const depth = float(textureLoad(depthTexture, uv));
 		const cur = rand(uv);
 
-		const pos = getWorldCoordsFromDepthUV(uv);
-		const probeInds = getNeighbouringProbesIndForPosition(pos);
-
-		textureStore(depthTextureTest, uv, vec4(vec3(depth), 1.0)).toReadWrite();
-
 		If(greaterThan(depth, minDepth), () => {
 			chance.assign(cur);
-			probeUV.assign(uv);
+			gridUV.assign(uv);
 			minDepth.assign(depth);
 		}).ElseIf(
 			greaterThanEqual(depth, minDepth).and(greaterThan(cur, chance)),
 			() => {
 				chance.assign(cur);
-				probeUV.assign(uv);
+				gridUV.assign(uv);
 			},
 		);
 	});
 
-	If(greaterThan(DEPTH_WIDTH, probeUV.y), () => {
+	If(greaterThan(DEPTH_WIDTH, gridUV.y), () => {
 		const probes = storage(probePositions, "vec4", PROBE_COUNT);
-		const coords = getWorldCoordsFromDepthUV(probeUV);
+		const coords = getWorldCoordsFromDepthUV(gridUV);
 		probes.element(instanceIndex).x = coords.x;
-		probes.element(instanceIndex).y = minDepth;
+		probes.element(instanceIndex).y = float(1).sub(minDepth).add(0.3);
 		probes.element(instanceIndex).z = coords.y;
 
-		textureStore(
-			depthTextureTest,
-			vec2(probeUV.x, probeUV.y),
-			vec4(1.0, 0.1, 0.4, 1.0),
-		).toReadWrite();
+		addProbeDot(gridUV);
 	});
+});
+
+export const computeRegularGridProbePositions = Fn(() => {
+	const rangeWidth = float(DEPTH_WIDTH).div(GRID_WIDTH);
+	const rangeHeight = float(DEPTH_HEIGHT).div(GRID_HEIGHT);
+
+	const levelIndex = instanceIndex.mod(float(PROBE_COUNT).div(2));
+	const left = rangeWidth.mul(levelIndex.mod(GRID_WIDTH));
+	const top = rangeHeight.mul(levelIndex.div(GRID_WIDTH));
+
+	let gridUV = uvec2(left, top);
+
+	const depth = float(textureLoad(depthTexture, gridUV));
+	const probes = storage(probePositions, "vec4", PROBE_COUNT);
+	const coords = getWorldCoordsFromDepthUV(gridUV);
+	probes.element(instanceIndex).x = coords.x;
+	probes.element(instanceIndex).y = ceil(
+		float(instanceIndex.add(1)).div(PROBE_COUNT).mul(2),
+	).sub(0.7);
+	probes.element(instanceIndex).z = coords.y;
+
+	addProbeDot(gridUV);
 });
 
 export const computeGlobalLight = Fn(() => {
@@ -199,7 +276,8 @@ export const computeGlobalLight = Fn(() => {
 	]);
 
 	const result = vec4(0);
-	const probeInds = getNeighbouringProbesIndForPosition(positionWorld.xz);
+	// CHANGE to switch between probe grids
+	const probeInds = getNeighbouringProbesRegularGrid(positionWorld.xz);
 
 	Loop(4, SH_COEFFICIENTS_COUNT, ({ i, j }) => {
 		const probeInd = probeInds.element(uint(i));
