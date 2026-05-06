@@ -4,6 +4,7 @@ import { getIrradianceColor } from "./irradiance-texture";
 import { computeGlobalLight } from "./global-light";
 import { Fn } from "three/src/nodes/TSL.js";
 import { float, color } from "three/tsl";
+import { GRID_HEIGHT, GRID_WIDTH, PROBE_COUNT } from "./constants";
 
 class BoundingBox {
 	constructor(x, y) {
@@ -175,9 +176,8 @@ class Model {
 			const material = new THREE.MeshPhongNodeMaterial({
 				color: randcolor,
 				flatShading: false,
+				outputNode: computeGlobalLight(GRID_WIDTH, GRID_HEIGHT, PROBE_COUNT),
 			});
-			// ENABLE to turn on light from probes
-			material.outputNode = computeGlobalLight();
 
 			const geometry = polyline.getGeometry();
 			geometry.computeVertexNormals();

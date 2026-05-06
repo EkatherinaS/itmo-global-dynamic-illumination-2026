@@ -33,17 +33,30 @@ import {
 	DEPTH_WIDTH,
 	depthTexture,
 	depthTextureTest,
+	GRID_HEIGHT,
+	GRID_WIDTH,
 	HEIGHT,
 	PROBE_COUNT,
 	probePositions,
 	sphericalHarmonics,
+	updateGridSize,
 	WIDTH,
 } from "./constants";
-import { addProbe, getLightProbes, updateProbes } from "./probe.js";
+import {
+	addProbe,
+	clearProbes,
+	hideLightProbeHelpers,
+	showLightProbeHelpers,
+	updateProbes,
+} from "./probe.js";
 import {
 	computeRegularGridProbePositions,
 	computeStreetGridProbePositions,
 	debugDepthMap,
+	debugProbes,
+	directLightUniform,
+	irradianceLightUniform,
+	probeLightUniform,
 } from "./global-light.js";
 
 async function main() {
@@ -120,10 +133,19 @@ async function main() {
 	let updateLightBuffer = computeLightBuffer().compute(12 * WIDTH * HEIGHT);
 	let updateIrradianceCubemap =
 		computeIrradianceCubemapFromLightBuffer().compute(12 * WIDTH * HEIGHT);
+
 	// CHANGE to switch between probe grids
-	let updateProbePositions =
-		computeRegularGridProbePositions().compute(PROBE_COUNT);
-	let updateDebugDepthMap = debugDepthMap().compute(DEPTH_WIDTH * DEPTH_HEIGHT);
+	let updateProbePositions = computeStreetGridProbePositions(
+		GRID_WIDTH,
+		GRID_HEIGHT,
+		PROBE_COUNT,
+	).compute(DEPTH_WIDTH * DEPTH_HEIGHT);
+	let updateDebugDepthMap = debugDepthMap(
+		GRID_WIDTH,
+		GRID_HEIGHT,
+		PROBE_COUNT,
+	).compute(DEPTH_WIDTH * DEPTH_HEIGHT);
+	let updateDebugProbes = debugProbes(PROBE_COUNT).compute(PROBE_COUNT);
 
 	// debug camera & plane for depth map
 	const renderTarget = new THREE.RenderTarget(DEPTH_WIDTH, DEPTH_HEIGHT);
@@ -192,42 +214,8 @@ async function main() {
 			.multiply(new THREE.Vector3(-1, 0, -1));
 		scene.add(group);
 
-		// debug RenderTarget switches to show depth map
-		renderer.setRenderTarget(renderTarget);
-		renderer.render(scene, testCamera);
-		renderer.setRenderTarget(null);
-
-		renderer.compute(updateDebugDepthMap);
-		renderer.compute(updateProbePositions);
-
-		const bufferArray = await renderer.getArrayBufferAsync(probePositions);
-		const outputData = new Float32Array(bufferArray);
-
-		console.log(outputData);
-
-		for (let i = 0; i < PROBE_COUNT; i++) {
-			addProbe(
-				scene,
-				outputData[i * 4 + 0],
-				outputData[i * 4 + 1],
-				outputData[i * 4 + 2],
-			);
-		}
-
-		/*
-        for (let i = -10; i < 10; i++) {
-			for (let j = -10; j < 10; j++) {
-				addProbe(scene, i, 1, j);
-			}
-		}
-        
-		addProbe(scene, 2.8, 0.3, -2);
-		addProbe(scene, 2.8, 0.3, 2);
-		addProbe(scene, 2.8, 1.3, -2);
-		addProbe(scene, 2.8, 1.3, 2);
-        */
-		updateProbes(scene, renderer);
-		getLightProbes(scene, renderer);
+		computeDepthMap();
+		updateComputeProbes();
 	});
 
 	const skydomeMesh = new Skydome(
@@ -254,14 +242,42 @@ async function main() {
 	}
 
 	// compute shader
-	function updateCompute() {
+	function updateComputeSkydom() {
 		renderer.compute(updateComputeTexture);
 		renderer.compute(updateComputeCubemap);
 		renderer.compute(updateLightBuffer);
 		renderer.compute(updateIrradianceCubemap);
+		updateProbes(scene, renderer);
+	}
+
+	async function updateComputeProbes() {
+		clearProbes(scene);
+
+		renderer.compute(updateProbePositions);
+		renderer.compute(updateDebugDepthMap);
+		renderer.compute(updateDebugProbes);
+
+		const bufferArray = await renderer.getArrayBufferAsync(probePositions);
+		const outputData = new Float32Array(bufferArray);
+		console.log(outputData);
+
+		for (let i = 0; i < PROBE_COUNT; i++) {
+			addProbe(
+				scene,
+				outputData[i * 4 + 0],
+				outputData[i * 4 + 1],
+				outputData[i * 4 + 2],
+			);
+		}
 
 		updateProbes(scene, renderer);
-		getLightProbes(scene, renderer);
+	}
+
+	function computeDepthMap() {
+		// debug RenderTarget switches to show depth map
+		renderer.setRenderTarget(renderTarget);
+		renderer.render(scene, testCamera);
+		renderer.setRenderTarget(null);
 	}
 
 	// DEBUG SECTION
@@ -354,7 +370,7 @@ async function main() {
 	// END OF DEBUG SECTION
 
 	scene.add(camera);
-	updateCompute();
+	updateComputeSkydom();
 
 	// SETTINGS
 
@@ -373,6 +389,13 @@ async function main() {
 		skydomsunY: 0.2,
 		skydomsunZ: 0.3,
 		skydomNevg: 0.3,
+		probeLight: false,
+		directLight: true,
+		probeHelpers: true,
+		irradianceLight: false,
+		probeGridSize: 8,
+		skydomIntensity: 0.5,
+		directIntensity: 0.5,
 	};
 	const pane = new Pane({
 		title: "Settings",
@@ -382,6 +405,7 @@ async function main() {
 	pane.addBinding(PARAMS, "shadows").on("change", (ev) => {
 		renderer.shadowMap.enabled = ev.value;
 	});
+
 	pane
 		.addBinding(PARAMS, "isbackground", {
 			label: "background",
@@ -389,20 +413,7 @@ async function main() {
 		.on("change", (ev) => {
 			skydomeMesh.setBackground(ev.value);
 		});
-	pane
-		.addBinding(PARAMS, "shadowcamera", {
-			label: "shadow camera",
-		})
-		.on("change", (ev) => {
-			helperShadowCamera.visible = ev.value;
-		});
-	pane
-		.addBinding(PARAMS, "skydomenormals", {
-			label: "skydome normals",
-		})
-		.on("change", (ev) => {
-			skyHelper.visible = ev.value;
-		});
+
 	pane
 		.addBinding(PARAMS, "mapnormals", {
 			label: "map normals",
@@ -410,13 +421,7 @@ async function main() {
 		.on("change", (ev) => {
 			helpers.forEach((helper) => (helper.visible = ev.value));
 		});
-	/*pane
-		.addBinding(PARAMS, "skydomehalfsphere", {
-			label: "skydome halfsphere",
-		})
-		.on("change", (ev) => {
-			skydomeMesh.setHalfSphere(ev.value);
-		});*/
+
 	pane
 		.addBinding(PARAMS, "controls", {
 			options: {
@@ -442,6 +447,7 @@ async function main() {
 				controls.maxPolarAngle = Math.PI / 3;
 			}
 		});
+
 	pane
 		.addBinding(PARAMS, "skydomskycolor", {
 			label: "sky color",
@@ -482,7 +488,7 @@ async function main() {
 			sunDirection.x = ev.value;
 			skydomeMesh.setSunDirection(sunDirection);
 			light.position.copy(sunDirection);
-			updateCompute();
+			updateComputeSkydom();
 		});
 
 	pane
@@ -496,7 +502,7 @@ async function main() {
 			sunDirection.y = ev.value;
 			skydomeMesh.setSunDirection(sunDirection);
 			light.position.copy(sunDirection);
-			updateCompute();
+			updateComputeSkydom();
 		});
 
 	pane
@@ -510,7 +516,7 @@ async function main() {
 			sunDirection.z = ev.value;
 			skydomeMesh.setSunDirection(sunDirection);
 			light.position.copy(sunDirection);
-			updateCompute();
+			updateComputeSkydom();
 		});
 
 	pane
@@ -523,8 +529,123 @@ async function main() {
 		.on("change", (ev) => {
 			skydomNevg = ev.value;
 			skydomeMesh.setNevg(skydomNevg);
-			updateCompute();
+			updateComputeSkydom();
 		});
+
+	// включение/выключение освещения от проб
+	pane
+		.addBinding(PARAMS, "probeLight", {
+			label: "probe light",
+		})
+		.on("change", (ev) => {
+			probeLightUniform.value = ev.value;
+		});
+
+	// включение/выключение направленного света
+	pane
+		.addBinding(PARAMS, "directLight", {
+			label: "direct light",
+		})
+		.on("change", (ev) => {
+			directLightUniform.value = ev.value;
+		});
+
+	// включение/выключение хелперов проб
+	pane
+		.addBinding(PARAMS, "probeHelpers", {
+			label: "probe helpers",
+		})
+		.on("change", (ev) => {
+			if (ev.value) {
+				showLightProbeHelpers();
+			} else {
+				hideLightProbeHelpers();
+			}
+		});
+
+	// включение/выключение irradiance cubemap (плюсом к текущему)
+	pane
+		.addBinding(PARAMS, "irradianceLight", {
+			label: "irradiance light",
+		})
+		.on("change", (ev) => {
+			irradianceLightUniform.value = ev.value;
+		});
+
+	// изменение количества проб
+	pane
+		.addBinding(PARAMS, "probeGridSize", {
+			label: "probe grid size",
+			min: 0,
+			max: 15,
+			step: 1,
+		})
+		.on("change", (ev) => {
+			updateGridSize(ev.value);
+			// gridWidthUniform.value = ev.value;
+			// gridHeightUniform.value = ev.value;
+			// probeCountUniform.value = ev.value * ev.value;
+
+			updateProbePositions = computeStreetGridProbePositions(
+				ev.value,
+				ev.value,
+				ev.value * ev.value,
+			).compute(DEPTH_WIDTH * DEPTH_HEIGHT);
+			updateDebugDepthMap = debugDepthMap(
+				ev.value,
+				ev.value,
+				ev.value * ev.value,
+			).compute(DEPTH_WIDTH * DEPTH_HEIGHT);
+			updateDebugProbes = debugProbes(ev.value * ev.value).compute(
+				ev.value * ev.value,
+			);
+
+			updateComputeProbes();
+		});
+
+	// изменение яркости небосвода
+	pane
+		.addBinding(PARAMS, "skydomIntensity", {
+			label: "skydom intensity",
+			min: 0,
+			max: 1,
+			step: 0.01,
+		})
+		.on("change", (ev) => {});
+
+	// изменение яркости направленного света
+	pane
+		.addBinding(PARAMS, "directIntensity", {
+			label: "direct intensity",
+			min: 0,
+			max: 1,
+			step: 0.01,
+		})
+		.on("change", (ev) => {});
+
+	/*
+	pane
+		.addBinding(PARAMS, "shadowcamera", {
+			label: "shadow camera",
+		})
+		.on("change", (ev) => {
+			helperShadowCamera.visible = ev.value;
+		});
+	pane
+		.addBinding(PARAMS, "skydomenormals", {
+			label: "skydome normals",
+		})
+		.on("change", (ev) => {
+			skyHelper.visible = ev.value;
+		});
+	pane
+		.addBinding(PARAMS, "skydomehalfsphere", {
+			label: "skydome halfsphere",
+		})
+		.on("change", (ev) => {
+			skydomeMesh.setHalfSphere(ev.value);
+        });
+    */
 }
 
 main();

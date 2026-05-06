@@ -15,7 +15,17 @@ class Probe {
 	}
 }
 
-const probes = [];
+let probes = [];
+let helpers = [];
+
+export const clearProbes = (scene) => {
+	helpers.forEach((helper) => {
+		scene.remove(helper);
+	});
+
+	probes = [];
+	helpers = [];
+};
 
 export const addProbe = (scene, x, y, z) => {
 	const cubeRenderTarget = new THREE.CubeRenderTarget(16, {
@@ -33,19 +43,14 @@ export const addProbe = (scene, x, y, z) => {
 };
 
 export const updateProbes = (scene, renderer) => {
-	probes.forEach((probe) => {
-		probe.camera.update(renderer, scene);
-	});
-};
-
-export const getLightProbes = (scene, renderer) => {
 	let count = 0;
 
 	const blockSize = SH_COEFFICIENTS_COUNT * 4;
 	const data = new Float32Array(blockSize * PROBE_COUNT);
-	//const positions = new Float32Array(PROBE_COUNT * 3);
 
 	probes.forEach((probe) => {
+		probe.camera.update(renderer, scene);
+
 		const promise = LightProbeGenerator.fromCubeRenderTarget(
 			renderer,
 			probe.renderTarget,
@@ -53,7 +58,6 @@ export const getLightProbes = (scene, renderer) => {
 
 		promise.then((lightprobe) => {
 			lightprobe.position.copy(probe.camera.position);
-			lightprobe.intensity = 2;
 			console.log(lightprobe);
 
 			lightprobe.sh.coefficients.forEach((v, i) => {
@@ -66,13 +70,24 @@ export const getLightProbes = (scene, renderer) => {
 			if (count == probes.length) {
 				sphericalHarmonics.copyArray(data);
 				sphericalHarmonics.needsUpdate = true;
-				//probePositions.copyArray(positions);
-				//probePositions.needsUpdate = true;
-
 				console.log(sphericalHarmonics);
 			}
 
-			scene.add(new LightProbeHelper(lightprobe, 0.2));
+			const helper = new LightProbeHelper(lightprobe, 0.2);
+			helpers.push(helper);
+			scene.add(helper);
 		});
+	});
+};
+
+export const showLightProbeHelpers = () => {
+	helpers.forEach((helper) => {
+		helper.visible = true;
+	});
+};
+
+export const hideLightProbeHelpers = () => {
+	helpers.forEach((helper) => {
+		helper.visible = false;
 	});
 };
