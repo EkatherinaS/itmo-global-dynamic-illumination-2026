@@ -176,7 +176,6 @@ class Model {
 			const material = new THREE.MeshPhongNodeMaterial({
 				color: randcolor,
 				flatShading: false,
-				outputNode: computeGlobalLight(GRID_WIDTH, GRID_HEIGHT, PROBE_COUNT),
 			});
 
 			const geometry = polyline.getGeometry();
@@ -187,6 +186,13 @@ class Model {
 			mesh.receiveShadow = true;
 			group.add(mesh);
 		});
+		group.position.set(0, 0, 0);
+		group.scale.set(0.01, 0.01, 0.01);
+		group.rotateX(-Math.PI / 2);
+		new THREE.Box3()
+			.setFromObject(group)
+			.getCenter(group.position)
+			.multiply(new THREE.Vector3(-1, 0, -1));
 		return group;
 	}
 }

@@ -3,8 +3,8 @@ import * as THREE from "three/webgpu";
 
 export const WIDTH = 32;
 export const HEIGHT = 32;
-export const DEPTH_WIDTH = 64;
-export const DEPTH_HEIGHT = 64;
+export const DEPTH_WIDTH = 256;
+export const DEPTH_HEIGHT = 256;
 export const DEPTH_CAMERA_LEFT = -10;
 export const DEPTH_CAMERA_RIGHT = 10;
 export const DEPTH_CAMERA_TOP = -10;
@@ -44,6 +44,10 @@ export const depthTexture = new THREE.DepthTexture(
 	DEPTH_HEIGHT,
 	THREE.FloatType,
 );
+
+const array = new Float32Array(DEPTH_WIDTH * DEPTH_HEIGHT * 4);
+array.fill(-1);
+export const visibleProbes = new THREE.StorageBufferAttribute(array, 4);
 
 export const probePositions = new THREE.StorageBufferAttribute(
 	MAX_GRID_SIZE * MAX_GRID_SIZE,

@@ -8,14 +8,7 @@ import {
 	sphericalHarmonics,
 } from "./constants.js";
 
-class Probe {
-	constructor(c, rt) {
-		this.camera = c;
-		this.renderTarget = rt;
-	}
-}
-
-let probes = [];
+let cameras = [];
 let helpers = [];
 
 export const clearProbes = (scene) => {
@@ -23,60 +16,56 @@ export const clearProbes = (scene) => {
 		scene.remove(helper);
 	});
 
-	probes = [];
+	cameras = [];
 	helpers = [];
 };
 
-export const addProbe = (scene, x, y, z) => {
-	const cubeRenderTarget = new THREE.CubeRenderTarget(16, {
-		minFilter: THREE.LinearFilter,
-		magFilter: THREE.LinearFilter,
-		format: THREE.RGBAFormat,
-		type: THREE.FloatType,
-	});
-	const cubeCamera = new THREE.CubeCamera(0.01, 1, cubeRenderTarget);
-	cubeCamera.position.set(x, y, z);
-	scene.add(cubeCamera);
-
-	const probe = new Probe(cubeCamera, cubeRenderTarget);
-	probes.push(probe);
+export const addProbe = (x, y, z) => {
+	cameras.push([x, y, z]);
 };
 
-export const updateProbes = (scene, renderer) => {
+export const updateProbes = async (scene, renderer) => {
 	let count = 0;
 
 	const blockSize = SH_COEFFICIENTS_COUNT * 4;
 	const data = new Float32Array(blockSize * PROBE_COUNT);
 
-	probes.forEach((probe) => {
-		probe.camera.update(renderer, scene);
+	cameras.forEach(async (pos) => {
+		const target = new THREE.CubeRenderTarget(64, {
+			format: THREE.RGBAFormat,
+			type: THREE.FloatType,
+		});
 
-		const promise = LightProbeGenerator.fromCubeRenderTarget(
+		const camera = new THREE.CubeCamera(0.01, 5, target);
+		camera.position.set(pos[0], pos[1], pos[2]);
+		camera.update(renderer, scene);
+		target.needsUpdate = true;
+
+		const lightprobe = await LightProbeGenerator.fromCubeRenderTarget(
 			renderer,
-			probe.renderTarget,
+			target,
 		);
 
-		promise.then((lightprobe) => {
-			lightprobe.position.copy(probe.camera.position);
-			console.log(lightprobe);
+		target.textures[0].dispose();
+		target.dispose();
 
-			lightprobe.sh.coefficients.forEach((v, i) => {
-				data[count * blockSize + i * 3] = v.x;
-				data[count * blockSize + i * 3 + 1] = v.y;
-				data[count * blockSize + i * 3 + 2] = v.z;
-			});
-			count++;
-
-			if (count == probes.length) {
-				sphericalHarmonics.copyArray(data);
-				sphericalHarmonics.needsUpdate = true;
-				console.log(sphericalHarmonics);
-			}
-
-			const helper = new LightProbeHelper(lightprobe, 0.2);
-			helpers.push(helper);
-			scene.add(helper);
+		lightprobe.position.copy(camera.position);
+		lightprobe.sh.coefficients.forEach((v, i) => {
+			data[count * blockSize + i * 3] = v.x;
+			data[count * blockSize + i * 3 + 1] = v.y;
+			data[count * blockSize + i * 3 + 2] = v.z;
 		});
+
+		count++;
+
+		if (count == cameras.length) {
+			sphericalHarmonics.copyArray(data);
+			sphericalHarmonics.needsUpdate = true;
+		}
+
+		const helper = new LightProbeHelper(lightprobe, 0.2);
+		helpers.push(helper);
+		scene.add(helper);
 	});
 };
 
