@@ -16,57 +16,56 @@ export const clearProbes = (scene) => {
 		scene.remove(helper);
 	});
 
+	cameras.forEach((camera) => {
+		camera.clear();
+		camera.renderTarget.textures[0].dispose();
+		camera.renderTarget.dispose();
+	});
+
 	cameras = [];
 	helpers = [];
 };
 
 export const addProbe = (x, y, z) => {
-	cameras.push([x, y, z]);
+	const target = new THREE.CubeRenderTarget(64, {
+		format: THREE.RGBAFormat,
+		type: THREE.FloatType,
+	});
+	const camera = new THREE.CubeCamera(0.01, 5, target);
+	camera.position.set(x, y, z);
+	cameras.push(camera);
 };
 
 export const updateProbes = async (scene, renderer) => {
-	let count = 0;
-
 	const blockSize = SH_COEFFICIENTS_COUNT * 4;
 	const data = new Float32Array(blockSize * PROBE_COUNT);
 
-	cameras.forEach(async (pos) => {
-		const target = new THREE.CubeRenderTarget(64, {
-			format: THREE.RGBAFormat,
-			type: THREE.FloatType,
-		});
-
-		const camera = new THREE.CubeCamera(0.01, 5, target);
-		camera.position.set(pos[0], pos[1], pos[2]);
+	for (let i = 0; i < cameras.length; i++) {
+		const camera = cameras[i];
 		camera.update(renderer, scene);
-		target.needsUpdate = true;
 
 		const lightprobe = await LightProbeGenerator.fromCubeRenderTarget(
 			renderer,
-			target,
+			camera.renderTarget,
 		);
-
-		target.textures[0].dispose();
-		target.dispose();
+		LightProbeGenerator.data = null;
 
 		lightprobe.position.copy(camera.position);
-		lightprobe.sh.coefficients.forEach((v, i) => {
-			data[count * blockSize + i * 3] = v.x;
-			data[count * blockSize + i * 3 + 1] = v.y;
-			data[count * blockSize + i * 3 + 2] = v.z;
+		lightprobe.sh.coefficients.forEach((v, j) => {
+			data[i * blockSize + j * 3] = v.x;
+			data[i * blockSize + j * 3 + 1] = v.y;
+			data[i * blockSize + j * 3 + 2] = v.z;
 		});
 
-		count++;
-
-		if (count == cameras.length) {
-			sphericalHarmonics.copyArray(data);
-			sphericalHarmonics.needsUpdate = true;
-		}
+		sphericalHarmonics.copyArray(data);
+		sphericalHarmonics.needsUpdate = true;
 
 		const helper = new LightProbeHelper(lightprobe, 0.2);
 		helpers.push(helper);
 		scene.add(helper);
-	});
+
+		lightprobe.dispose();
+	}
 };
 
 export const showLightProbeHelpers = () => {

@@ -293,7 +293,7 @@ async function main() {
 			);
 		}
 
-		updateProbes(scene, renderer);
+		await updateProbes(scene, renderer);
 	}
 
 	function computeDepthMap() {
@@ -636,24 +636,23 @@ async function main() {
 			irradianceLightUniform.value = ev.value;
 		});
 
-	// TODO
 	// изменение количества проб
-	// pane
-	// 	.addBinding(PARAMS, "probeGridSize", {
-	// 		label: "probe grid size",
-	// 		min: 0,
-	// 		max: 15,
-	// 		step: 1,
-	// 	})
-	// 	.on("change", async (ev) => {
-	// 		if (!ev.last) return;
-	// 		updateGridSize(ev.value);
-	// 		updateDebugProbes = debugProbes().compute(ev.value * ev.value);
-	// 		gridWidthUniform.value = ev.value;
-	// 		gridHeightUniform.value = ev.value;
-	// 		probeCountUniform.value = ev.value * ev.value;
-	// 		await updateComputeProbes();
-	// 	});
+	pane
+		.addBinding(PARAMS, "probeGridSize", {
+			label: "probe grid size",
+			min: 0,
+			max: 15,
+			step: 1,
+		})
+		.on("change", async (ev) => {
+			if (!ev.last) return;
+			updateGridSize(ev.value);
+			updateDebugProbes = debugProbes().compute(ev.value * ev.value);
+			gridWidthUniform.value = ev.value;
+			gridHeightUniform.value = ev.value;
+			probeCountUniform.value = ev.value * ev.value;
+			await updateComputeProbes();
+		});
 
 	// изменение яркости небосвода
 	pane
@@ -688,26 +687,26 @@ async function main() {
 		});
 
 	/*
-	pane
-		.addBinding(PARAMS, "shadowcamera", {
-			label: "shadow camera",
-		})
-		.on("change", (ev) => {
-			helperShadowCamera.visible = ev.value;
-		});
-	pane
-		.addBinding(PARAMS, "skydomenormals", {
-			label: "skydome normals",
-		})
-		.on("change", (ev) => {
-			skyHelper.visible = ev.value;
-		});
-	pane
-		.addBinding(PARAMS, "skydomehalfsphere", {
-			label: "skydome halfsphere",
-		})
-		.on("change", (ev) => {
-			skydomeMesh.setHalfSphere(ev.value);
+    pane
+        .addBinding(PARAMS, "shadowcamera", {
+            label: "shadow camera",
+        })
+        .on("change", (ev) => {
+            helperShadowCamera.visible = ev.value;
+        });
+    pane
+        .addBinding(PARAMS, "skydomenormals", {
+            label: "skydome normals",
+        })
+        .on("change", (ev) => {
+            skyHelper.visible = ev.value;
+        });
+    pane
+        .addBinding(PARAMS, "skydomehalfsphere", {
+            label: "skydome halfsphere",
+        })
+        .on("change", (ev) => {
+            skydomeMesh.setHalfSphere(ev.value);
         });
     */
 }
