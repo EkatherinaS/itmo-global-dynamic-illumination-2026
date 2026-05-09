@@ -155,7 +155,7 @@ async function main() {
 	let updateDebugDepthMap = debugDepthMap().compute(DEPTH_WIDTH * DEPTH_HEIGHT);
 	let updateDebugProbes = debugProbes().compute(PROBE_COUNT);
 	let updateProbeVisibility = computeProbeVisibility().compute(
-		DEPTH_WIDTH * DEPTH_HEIGHT * 4,
+		DEPTH_WIDTH * DEPTH_HEIGHT,
 	);
 
 	// debug camera & plane for depth map

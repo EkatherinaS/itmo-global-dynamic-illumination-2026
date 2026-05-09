@@ -46,7 +46,7 @@ export const depthTexture = new THREE.DepthTexture(
 );
 
 const array = new Float32Array(DEPTH_WIDTH * DEPTH_HEIGHT * 4);
-array.fill(-1);
+array.fill(-1.0);
 export const visibleProbes = new THREE.StorageBufferAttribute(array, 4);
 
 export const probePositions = new THREE.StorageBufferAttribute(

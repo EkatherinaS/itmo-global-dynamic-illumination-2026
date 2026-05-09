@@ -60,6 +60,7 @@ import {
 	round,
 	bool,
 	normalWorld,
+	sqrt,
 } from "three/tsl";
 import { getIrradianceColor } from "./irradiance-texture";
 import { normalize } from "three/src/math/MathUtils.js";
@@ -111,22 +112,50 @@ const getNeighbouringProbesStreetGrid = Fn(([uv]) => {
 	const i = floor(float(uv.x).div(rangeWidth));
 	const j = floor(float(uv.y).div(rangeHeight));
 
-	let iPairAdd = min(gridWidthUniform.sub(1), i.add(1));
-	let jPairAdd = min(gridHeightUniform.sub(1), j.add(1));
-	let iPairSub = max(0, i.sub(1));
-	let jPairSub = max(0, j.sub(1));
+	const iPairAdd = i.add(1);
+	const jPairAdd = j.add(1);
+	const iPairSub = i.sub(1);
+	const jPairSub = j.sub(1);
 
-	return array([
+	const result = array([
 		j.mul(gridWidthUniform).add(i),
 		jPairAdd.mul(gridWidthUniform).add(i),
 		jPairSub.mul(gridWidthUniform).add(i),
+
 		j.mul(gridWidthUniform).add(iPairAdd),
-		j.mul(gridWidthUniform).add(iPairSub),
 		jPairAdd.mul(gridWidthUniform).add(iPairAdd),
 		jPairSub.mul(gridWidthUniform).add(iPairAdd),
+
+		j.mul(gridWidthUniform).add(iPairSub),
 		jPairAdd.mul(gridWidthUniform).add(iPairSub),
 		jPairSub.mul(gridWidthUniform).add(iPairSub),
 	]);
+
+	If(iPairAdd.equal(gridWidthUniform), () => {
+		result.element(3).assign(-1);
+		result.element(4).assign(-1);
+		result.element(5).assign(-1);
+	});
+
+	If(iPairSub.equal(-1), () => {
+		result.element(6).assign(-1);
+		result.element(7).assign(-1);
+		result.element(8).assign(-1);
+	});
+
+	If(jPairAdd.equal(gridHeightUniform), () => {
+		result.element(1).assign(-1);
+		result.element(4).assign(-1);
+		result.element(7).assign(-1);
+	});
+
+	If(jPairSub.equal(-1), () => {
+		result.element(2).assign(-1);
+		result.element(5).assign(-1);
+		result.element(8).assign(-1);
+	});
+
+	return result;
 });
 
 const getNeighbouringProbesRegularGrid = Fn(([pos]) => {
@@ -171,39 +200,26 @@ export const debugDepthMap = Fn(() => {
 		uv,
 		vec4(
 			depth.x
-				.sub(0.3)
-				.add(float(visibleProbeInds.x).add(0.1).div(probeCountUniform)),
+				.sub(0.4)
+				.add(float(visibleProbeInds.x).add(0.1).div(probeCountUniform).mul(4)),
 			depth.y
-				.sub(0.3)
-				.add(float(visibleProbeInds.y).add(0.1).div(probeCountUniform)),
+				.sub(0.4)
+				.add(float(visibleProbeInds.y).add(0.1).div(probeCountUniform).mul(4)),
 			depth.z
-				.sub(0.3)
-				.add(float(visibleProbeInds.z).add(0.1).div(probeCountUniform)),
-			1.0, //float(visibleProbeInds.element(3)).div(probeCountUniform),
+				.sub(0.4)
+				.add(float(visibleProbeInds.z).add(0.1).div(probeCountUniform).mul(4)),
+			1.0,
 		),
 	).toReadWrite();
 });
 
-export const computeProbeVisibility = Fn(() => {
-	const u = instanceIndex.mod(DEPTH_WIDTH * 4).div(4);
-	const v = instanceIndex.div(DEPTH_WIDTH * 4);
-	const probeNum = instanceIndex.mod(4);
-	const textureInd = instanceIndex.div(4);
-
-	const uv = vec2(u, v);
-
-	const probeInds = getNeighbouringProbesStreetGrid(uv);
-	const probesAll = storage(probePositions, "vec4", probeCountUniform);
-	const probesVis = storage(visibleProbes, "vec4", DEPTH_HEIGHT * DEPTH_WIDTH);
-
-	const probeInd = probeInds.element(probeNum);
-	const probe = vec4(probesAll.element(probeInd));
-
+const computeVisibilityForUV = Fn(({ uv, probeInd, probe }) => {
 	const uvProbe = getDepthUVFromWorldCoords(probe.xz);
-	const dx = uv.x.sub(uvProbe.x);
-	const dy = uv.y.sub(uvProbe.y);
+	const dx = int(uv.x).sub(uvProbe.x);
+	const dy = int(uv.y).sub(uvProbe.y);
 
-	const steps = uint(max(abs(dx), abs(dy)));
+	const steps = uint(max(abs(dx), abs(dy)).sub(1));
+	const result = probeInd;
 
 	Loop(steps, ({ i }) => {
 		const t = float(i).div(steps);
@@ -211,94 +227,188 @@ export const computeProbeVisibility = Fn(() => {
 		const y = round(uvProbe.y.add(t.mul(dy)));
 		const depth = float(textureLoad(depthTexture, vec2(x, y)));
 		If(depth.lessThan(1.0), () => {
-			probeInds.element(probeNum).assign(-1);
+			result.assign(-1);
 		});
 	});
 
-	If(probeNum.equal(0), () => {
-		probesVis.element(textureInd).x = probeInds.element(0);
-	});
-	If(probeNum.equal(1), () => {
-		probesVis.element(textureInd).y = probeInds.element(1);
-	});
-	If(probeNum.equal(2), () => {
-		probesVis.element(textureInd).z = probeInds.element(2);
-	});
-	If(probeNum.equal(3), () => {
-		probesVis.element(textureInd).w = probeInds.element(3);
-	});
+	return result;
 });
 
-// const computeSingleProbeVisibilityForUV = Fn(({ uv, probeNum }) => {
-// 	const probeInds = getNeighbouringProbesStreetGrid(uv);
-// 	const probesAll = storage(probePositions, "vec4", probeCountUniform);
+export const computeProbeVisibility = Fn(() => {
+	const u = instanceIndex.mod(DEPTH_WIDTH);
+	const v = instanceIndex.div(DEPTH_WIDTH);
+	const uv = vec2(u, v);
+	const pos = getWorldCoordsFromDepthUV(uv);
 
-// 	const probeInd = probeInds.element(probeNum);
-// 	const probe = vec4(probesAll.element(probeInd));
-// 	const uvProbe = getDepthUVFromWorldCoords(probe.xz);
-// 	const dx = uv.x.sub(uvProbe.x);
-// 	const dy = uv.y.sub(uvProbe.y);
+	const probeInds = getNeighbouringProbesStreetGrid(uv);
+	const probesAll = storage(probePositions, "vec4", probeCountUniform);
+	const probesVis = storage(visibleProbes, "vec4", DEPTH_HEIGHT * DEPTH_WIDTH);
+	const results = probeInds;
 
-// 	const steps = uint(max(abs(dx), abs(dy)));
-// 	const result = probeInds.element(probeNum);
+	If(probeInds.element(0).notEqual(-1), () => {
+		results
+			.element(0)
+			.assign(
+				computeVisibilityForUV(
+					uv,
+					probeInds.element(0),
+					probesAll.element(probeInds.element(0)),
+				),
+			);
+	});
 
-// 	Loop(steps, ({ i }) => {
-// 		const t = float(i).div(steps);
-// 		const x = round(uvProbe.x.add(t.mul(dx)));
-// 		const y = round(uvProbe.y.add(t.mul(dy)));
-// 		const depth = float(textureLoad(depthTexture, vec2(x, y)));
-// 		If(depth.lessThan(1.0), () => {
-// 			result.assign(-1);
-// 		});
-// 	});
+	If(probeInds.element(1).notEqual(-1), () => {
+		results
+			.element(1)
+			.assign(
+				computeVisibilityForUV(
+					uv,
+					probeInds.element(1),
+					probesAll.element(probeInds.element(1)),
+				),
+			);
+	});
 
-// 	return result;
-// });
+	If(probeInds.element(2).notEqual(-1), () => {
+		results
+			.element(2)
+			.assign(
+				computeVisibilityForUV(
+					uv,
+					probeInds.element(2),
+					probesAll.element(probeInds.element(2)),
+				),
+			);
+	});
 
-// export const computeProbeVisibility = Fn(() => {
-// 	const u = instanceIndex.mod(DEPTH_WIDTH);
-// 	const v = instanceIndex.div(DEPTH_WIDTH);
-// 	const uv = vec2(u, v);
+	If(probeInds.element(3).notEqual(-1), () => {
+		results
+			.element(3)
+			.assign(
+				computeVisibilityForUV(
+					uv,
+					probeInds.element(3),
+					probesAll.element(probeInds.element(3)),
+				),
+			);
+	});
 
-// 	const probeInds = getNeighbouringProbesStreetGrid(uv);
-// 	const probesAll = storage(probePositions, "vec4", probeCountUniform);
-// 	const probesVis = storage(visibleProbes, "vec4", DEPTH_HEIGHT * DEPTH_WIDTH);
+	If(probeInds.element(4).notEqual(-1), () => {
+		results
+			.element(4)
+			.assign(
+				computeVisibilityForUV(
+					uv,
+					probeInds.element(4),
+					probesAll.element(probeInds.element(4)),
+				),
+			);
+	});
 
-// 	Loop(9, ({ i }) => {
-// 		const result = computeSingleProbeVisibilityForUV(uv, i);
+	If(probeInds.element(5).notEqual(-1), () => {
+		results
+			.element(5)
+			.assign(
+				computeVisibilityForUV(
+					uv,
+					probeInds.element(5),
+					probesAll.element(probeInds.element(5)),
+				),
+			);
+	});
 
-// 		If(result.notEqual(-1), () => {
-// 			const pos = getWorldCoordsFromDepthUV(uv);
-// 			const probeInd = probeInds.element(i);
-// 			const probe = vec4(probesAll.element(probeInd));
-// 			const dist = distance(pos.xy, probe.xz);
+	If(probeInds.element(6).notEqual(-1), () => {
+		results
+			.element(6)
+			.assign(
+				computeVisibilityForUV(
+					uv,
+					probeInds.element(6),
+					probesAll.element(probeInds.element(6)),
+				),
+			);
+	});
 
-// 			const probe1 = probesAll.element(probesVis.element(instanceIndex).x);
-// 			const probe2 = probesAll.element(probesVis.element(instanceIndex).y);
-// 			const probe3 = probesAll.element(probesVis.element(instanceIndex).z);
-// 			const probe4 = probesAll.element(probesVis.element(instanceIndex).w);
+	If(probeInds.element(7).notEqual(-1), () => {
+		results
+			.element(7)
+			.assign(
+				computeVisibilityForUV(
+					uv,
+					probeInds.element(7),
+					probesAll.element(probeInds.element(7)),
+				),
+			);
+	});
 
-// 			If(distance(pos.xy, probe1.xz).greaterThan(dist), () => {
-// 				const val = probesVis.element(instanceIndex).xyz;
-// 				probesVis.element(instanceIndex).yzw = val;
-// 				probesVis.element(instanceIndex).x = probeInd;
-// 			})
-// 				.ElseIf(distance(pos.xy, probe2.xz).greaterThan(dist), () => {
-// 					const val = probesVis.element(instanceIndex).yz;
-// 					probesVis.element(instanceIndex).zw = val;
-// 					probesVis.element(instanceIndex).y = probeInd;
-// 				})
-// 				.ElseIf(distance(pos.xy, probe3.xz).greaterThan(dist), () => {
-// 					const val = probesVis.element(instanceIndex).z;
-// 					probesVis.element(instanceIndex).w = val;
-// 					probesVis.element(instanceIndex).z = probeInd;
-// 				})
-// 				.ElseIf(distance(pos.xy, probe4.xz).greaterThan(dist), () => {
-// 					probesVis.element(instanceIndex).w = probeInd;
-// 				});
-// 		});
-// 	});
-// });
+	If(probeInds.element(8).notEqual(-1), () => {
+		results
+			.element(8)
+			.assign(
+				computeVisibilityForUV(
+					uv,
+					probeInds.element(8),
+					probesAll.element(probeInds.element(8)),
+				),
+			);
+	});
+
+	const d0 = float(1e10);
+	const d1 = float(1e10);
+	const d2 = float(1e10);
+	const d3 = float(1e10);
+
+	const p0 = int(-1);
+	const p1 = int(-1);
+	const p2 = int(-1);
+	const p3 = int(-1);
+
+	Loop(9, ({ i }) => {
+		const probe = probesAll.element(probeInds.element(i));
+		const x = distance(pos.xy, probe.xz);
+		const p = results.element(i);
+
+		If(p.notEqual(-1), () => {
+			If(x.lessThan(d0), () => {
+				d3.assign(d2);
+				d2.assign(d1);
+				d1.assign(d0);
+				d0.assign(x);
+
+				p3.assign(p2);
+				p2.assign(p1);
+				p1.assign(p0);
+				p0.assign(p);
+			})
+				.ElseIf(x.lessThan(d1), () => {
+					d3.assign(d2);
+					d2.assign(d1);
+					d1.assign(x);
+
+					p3.assign(p2);
+					p2.assign(p1);
+					p1.assign(p);
+				})
+				.ElseIf(x.lessThan(d2), () => {
+					d3.assign(d2);
+					d2.assign(x);
+
+					p3.assign(p2);
+					p2.assign(p);
+				})
+				.ElseIf(x.lessThan(d3), () => {
+					d3.assign(x);
+
+					p3.assign(p);
+				});
+		});
+	});
+
+	probesVis.element(instanceIndex).x = p0;
+	probesVis.element(instanceIndex).y = p1;
+	probesVis.element(instanceIndex).z = p2;
+	probesVis.element(instanceIndex).w = p3;
+});
 
 export const debugProbes = Fn(() => {
 	If(instanceIndex.lessThan(probeCountUniform), () => {
@@ -329,30 +439,30 @@ export const computeStreetGridProbePositions = Fn(() => {
 	const rangeWidth = float(DEPTH_WIDTH).div(gridWidthUniform);
 	const rangeHeight = float(DEPTH_HEIGHT).div(gridHeightUniform);
 
-	const uGrid = u.div(rangeWidth);
-	const vGrid = v.div(rangeHeight);
+	const uGrid = uint(u.div(rangeWidth));
+	const vGrid = uint(v.div(rangeHeight));
 
 	const probeIndex = uint(vGrid.mul(gridWidthUniform).add(uGrid));
-	const depth0 = float(textureLoad(depthTexture, vec2(u, v)));
-	const depth1 = float(textureLoad(depthTexture, vec2(u.add(1), v)));
-	const depth2 = float(textureLoad(depthTexture, vec2(u, v.add(1))));
-	const depth3 = float(textureLoad(depthTexture, vec2(u.sub(1), v)));
-	const depth4 = float(textureLoad(depthTexture, vec2(u, v.sub(1))));
 
-	If(
-		equal(depth0, 1.0)
-			.and(equal(depth1, 1.0))
-			.and(equal(depth2, 1.0))
-			.and(equal(depth3, 1.0))
-			.and(equal(depth4, 1.0)),
-		() => {
-			const probes = storage(probePositions, "vec4", probeCountUniform);
-			const coords = getWorldCoordsFromDepthUV(vec2(u, v));
-			probes.element(probeIndex).x = coords.x;
-			probes.element(probeIndex).y = 0.3;
-			probes.element(probeIndex).z = coords.y;
-		},
-	);
+	const range = rangeWidth.div(4);
+	const allClear = bool(true);
+
+	Loop(range, range, ({ i, j }) => {
+		const x = u.add(i).sub(range.div(2));
+		const y = v.add(j).sub(range.div(2));
+		const depth = float(textureLoad(depthTexture, vec2(x, y)));
+		If(depth.lessThan(1.0), () => {
+			allClear.assign(false);
+		});
+	});
+
+	If(allClear, () => {
+		const probes = storage(probePositions, "vec4", probeCountUniform);
+		const coords = getWorldCoordsFromDepthUV(vec2(u, v));
+		probes.element(probeIndex).x = coords.x;
+		probes.element(probeIndex).y = 0.3;
+		probes.element(probeIndex).z = coords.y;
+	});
 });
 
 export const computeStreetGridProbePositionsBruteForce = Fn(() => {
@@ -444,7 +554,6 @@ export const computeProbeLight = Fn(() => {
 	]);
 
 	const result = vec4(0);
-	// CHANGE to switch between probe grids
 	const uv = getDepthUVFromWorldCoords(positionWorld.xz);
 	const ind = uint(uv.y).mul(DEPTH_WIDTH).add(uv.x);
 	const probeInds = array([
@@ -454,28 +563,87 @@ export const computeProbeLight = Fn(() => {
 		probesVis.element(ind).w,
 	]);
 
-	Loop(4, SH_COEFFICIENTS_COUNT, ({ i, j }) => {
-		const probeInd = probeInds.element(uint(i));
-		const coefInd = uint(j);
-		const shCoeff = vec4(
-			shCoeffs.element(probeInd.mul(SH_COEFFICIENTS_COUNT).add(coefInd)),
+	const totalInvDist = float(0);
+	Loop(4, ({ i }) => {
+		const ind = probeInds.element(i);
+		If(ind.notEqual(-1), () => {
+			const probe = probesAll.element(ind);
+			const dist = distance(positionWorld.xz, probe.xz);
+			totalInvDist.addAssign(float(1).div(dist));
+		});
+	});
+
+	const probeInd0 = probeInds.element(0);
+	const probeInd1 = probeInds.element(1);
+	const probeInd2 = probeInds.element(2);
+	const probeInd3 = probeInds.element(3);
+
+	const probe0 = probesAll.element(probeInd0);
+	const probe1 = probesAll.element(probeInd1);
+	const probe2 = probesAll.element(probeInd2);
+	const probe3 = probesAll.element(probeInd3);
+
+	const dist0 = distance(positionWorld.xz, probe0.xz);
+	const dist1 = distance(positionWorld.xz, probe1.xz);
+	const dist2 = distance(positionWorld.xz, probe2.xz);
+	const dist3 = distance(positionWorld.xz, probe3.xz);
+
+	const modif0 = float(1).div(dist0).div(totalInvDist);
+	const modif1 = float(1).div(dist1).div(totalInvDist);
+	const modif2 = float(1).div(dist2).div(totalInvDist);
+	const modif3 = float(1).div(dist3).div(totalInvDist);
+
+	const direction0 = probe0.xyz.sub(positionWorld).normalize();
+	const direction1 = probe1.xyz.sub(positionWorld).normalize();
+	const direction2 = probe2.xyz.sub(positionWorld).normalize();
+	const direction3 = probe3.xyz.sub(positionWorld).normalize();
+
+	const dot0 = min(float(1.5), max(float(0), direction0.dot(normalWorld)));
+	const dot1 = min(float(1.5), max(float(0), direction1.dot(normalWorld)));
+	const dot2 = min(float(1.5), max(float(0), direction2.dot(normalWorld)));
+	const dot3 = min(float(1.5), max(float(0), direction3.dot(normalWorld)));
+
+	Loop(SH_COEFFICIENTS_COUNT, ({ i }) => {
+		const coefInd = uint(i);
+
+		const shCoeff0 = vec4(
+			shCoeffs.element(probeInd0.mul(SH_COEFFICIENTS_COUNT).add(coefInd)),
+		);
+		const shCoeff1 = vec4(
+			shCoeffs.element(probeInd1.mul(SH_COEFFICIENTS_COUNT).add(coefInd)),
+		);
+		const shCoeff2 = vec4(
+			shCoeffs.element(probeInd2.mul(SH_COEFFICIENTS_COUNT).add(coefInd)),
+		);
+		const shCoeff3 = vec4(
+			shCoeffs.element(probeInd3.mul(SH_COEFFICIENTS_COUNT).add(coefInd)),
 		);
 
-		const probe = vec4(probesAll.element(probeInd));
-		// TODO: How to account for distance here?
-		const dist = max(distance(positionWorld, probe), 1.0);
-
-		const direction = probe.xyz.sub(positionWorld).normalize();
-		const dot = max(float(0.0), direction.dot(normalWorld));
-
-		If(probeInd.greaterThanEqual(0), () => {
+		If(probeInd0.notEqual(-1), () => {
 			result.addAssign(
-				shCoeff.mul(shBasis.element(coefInd)).mul(dot).div(dist).div(dist),
+				shCoeff0.mul(shBasis.element(coefInd)).mul(modif0).mul(dot0),
+			);
+		});
+		If(probeInd1.notEqual(-1), () => {
+			result.addAssign(
+				shCoeff1.mul(shBasis.element(coefInd)).mul(modif1).mul(dot1),
+			);
+		});
+		If(probeInd2.notEqual(-1), () => {
+			result.addAssign(
+				shCoeff2.mul(shBasis.element(coefInd)).mul(modif2).mul(dot2),
+			);
+		});
+		If(probeInd3.notEqual(-1), () => {
+			result.addAssign(
+				shCoeff3.mul(shBasis.element(coefInd)).mul(modif3).mul(dot3),
 			);
 		});
 	});
 
-	return result; //vec4(positionWorld.mul(0.01), 1.0);
+	const dist = max(1.0, distance(positionWorld.xz, vec2(0)).sub(10));
+	const distanceModif = max(0.0, float(2.0).sub(dist.mul(dist)));
+	return result.mul(distanceModif);
 });
 
 export const computeGlobalLight = Fn(() => {
