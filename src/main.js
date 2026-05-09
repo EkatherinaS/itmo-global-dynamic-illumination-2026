@@ -33,18 +33,40 @@ import {
 	DEPTH_WIDTH,
 	depthTexture,
 	depthTextureTest,
+	GRID_HEIGHT,
+	GRID_WIDTH,
 	HEIGHT,
 	PROBE_COUNT,
 	probePositions,
 	sphericalHarmonics,
+	updateGridSize,
 	WIDTH,
 } from "./constants";
-import { addProbe, getLightProbes, updateProbes } from "./probe.js";
 import {
+	addProbe,
+	clearProbes,
+	hideLightProbeHelpers,
+	showLightProbeHelpers,
+	updateProbes,
+} from "./probe.js";
+import {
+	computeGlobalLight,
+	computeProbeVisibility,
 	computeRegularGridProbePositions,
 	computeStreetGridProbePositions,
 	debugDepthMap,
+	debugProbes,
+	directLightIntensityUniform,
+	directLightUniform,
+	gridHeightUniform,
+	gridWidthUniform,
+	irradianceLightIntensityUniform,
+	irradianceLightUniform,
+	probeCountUniform,
+	probeLightIntensityUniform,
+	probeLightUniform,
 } from "./global-light.js";
+import { int, uint } from "three/tsl";
 
 async function main() {
 	const adapter = await navigator.gpu.requestAdapter();
@@ -59,7 +81,7 @@ async function main() {
 	});
 	renderer.setPixelRatio(window.devicePixelRatio);
 	renderer.setSize(window.innerWidth, window.innerHeight);
-	renderer.setAnimationLoop(animate);
+	renderer.setAnimationLoop(animateAsync);
 	renderer.shadowMap.enabled = true;
 	renderer.shadowMap.type = THREE.BasicShadowMap;
 	renderer.toneMapping = THREE.NoToneMapping;
@@ -71,7 +93,7 @@ async function main() {
 	const scene = new THREE.Scene();
 
 	const axesHelper = new THREE.AxesHelper(3);
-	//scene.add(axesHelper);
+	scene.add(axesHelper);
 
 	const camera = new THREE.PerspectiveCamera();
 	camera.fov = 60;
@@ -87,11 +109,11 @@ async function main() {
 	//const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 	//scene.add(ambientLight);
 
-	let sunDirection = new THREE.Vector3(0.1, 0.2, 0.3);
+	let sunDirection = new THREE.Vector3(0.1, 0.2, 0.3).normalize();
 	let skydomNevg = 0.75;
 
 	const light = new THREE.DirectionalLight(0xffffff, 5);
-	light.position.copy(sunDirection);
+	light.position.copy(sunDirection.multiplyScalar(10));
 	light.castShadow = true;
 
 	light.shadow.radius = 1;
@@ -100,12 +122,17 @@ async function main() {
 	light.shadow.mapSize.height = 1024;
 	light.shadow.bias = -0.002;
 
+	light.shadow.camera.rotation.set(0);
 	light.shadow.camera.left = -15;
 	light.shadow.camera.right = 15;
 	light.shadow.camera.top = 15;
 	light.shadow.camera.bottom = -15;
 	light.shadow.camera.near = 1;
-	light.shadow.camera.far = 10;
+	light.shadow.camera.far = 30;
+
+	// const helperShadowCamera = new THREE.CameraHelper(light.shadow.camera);
+	// helperShadowCamera.visible = true;
+	// scene.add(helperShadowCamera);
 
 	scene.add(light);
 
@@ -120,10 +147,16 @@ async function main() {
 	let updateLightBuffer = computeLightBuffer().compute(12 * WIDTH * HEIGHT);
 	let updateIrradianceCubemap =
 		computeIrradianceCubemapFromLightBuffer().compute(12 * WIDTH * HEIGHT);
+
 	// CHANGE to switch between probe grids
-	let updateProbePositions =
-		computeRegularGridProbePositions().compute(PROBE_COUNT);
+	let updateProbePositions = computeStreetGridProbePositions().compute(
+		DEPTH_WIDTH * DEPTH_HEIGHT,
+	);
 	let updateDebugDepthMap = debugDepthMap().compute(DEPTH_WIDTH * DEPTH_HEIGHT);
+	let updateDebugProbes = debugProbes().compute(PROBE_COUNT);
+	let updateProbeVisibility = computeProbeVisibility().compute(
+		DEPTH_WIDTH * DEPTH_HEIGHT,
+	);
 
 	// debug camera & plane for depth map
 	const renderTarget = new THREE.RenderTarget(DEPTH_WIDTH, DEPTH_HEIGHT);
@@ -142,19 +175,15 @@ async function main() {
 
 	await renderer.init();
 
-	//const helperShadowCamera = new THREE.CameraHelper(light.shadow.camera);
-	//helperShadowCamera.visible = false;
-	//scene.add(helperShadowCamera);
-
 	const loader = new GLTFLoader();
+	let carModel, mapModel;
+
 	loader.load(
 		//"public/models/gol_quadrado.glb",
 		"public/models/porsche_911.glb",
 		(gltf) => {
 			const model = gltf.scene;
-			//const material = new THREE.MeshBasicMaterial();
-			//material.colorNode = getIrradianceColor();
-			const material = new THREE.MeshPhongMaterial({
+			const material = new THREE.MeshPhongNodeMaterial({
 				color: 0xffffff,
 				flatShading: false,
 			});
@@ -164,7 +193,7 @@ async function main() {
 			model.position.set(2, 0, 1.5);
 			model.scale.set(0.2, 0.2, 0.2);
 			model.rotateY(-1);
-			scene.add(model);
+			carModel = model;
 		},
 		undefined,
 		(error) => {
@@ -172,62 +201,34 @@ async function main() {
 		},
 	);
 
+	function updateMaterials() {
+		carModel.traverse((o) => {
+			if (o.isMesh) o.material.outputNode = computeGlobalLight();
+		});
+		scene.add(carModel);
+		mapModel.traverse((o) => {
+			if (o.isMesh) o.material.outputNode = computeGlobalLight();
+		});
+		ground.setMaterialOutputNode(computeGlobalLight());
+	}
+
 	const dxfloader = new DXFLoader();
 	const helpers = [];
-	dxfloader.load("public/models/contours.dxf", async function (model) {
+	dxfloader.load("public/models/contours.dxf", function (model) {
 		const group = model.model;
-		group.position.set(0, 0, 0);
-		group.scale.set(0.01, 0.01, 0.01);
-		group.rotateX(-Math.PI / 2);
-		group.children.forEach((mesh) =>
-			helpers.push(new VertexNormalsHelper(mesh, 10, 0xff0000, 10)),
-		);
+		group.children.forEach((mesh) => {
+			helpers.push(new VertexNormalsHelper(mesh, 10, 0xff0000, 10));
+		});
 		helpers.forEach((helper) => {
 			group.add(helper);
 			helper.visible = false;
 		});
-		new THREE.Box3()
-			.setFromObject(group)
-			.getCenter(group.position)
-			.multiply(new THREE.Vector3(-1, 0, -1));
-		scene.add(group);
+		mapModel = group;
+		scene.add(mapModel);
 
-		// debug RenderTarget switches to show depth map
-		renderer.setRenderTarget(renderTarget);
-		renderer.render(scene, testCamera);
-		renderer.setRenderTarget(null);
-
-		renderer.compute(updateDebugDepthMap);
-		renderer.compute(updateProbePositions);
-
-		const bufferArray = await renderer.getArrayBufferAsync(probePositions);
-		const outputData = new Float32Array(bufferArray);
-
-		console.log(outputData);
-
-		for (let i = 0; i < PROBE_COUNT; i++) {
-			addProbe(
-				scene,
-				outputData[i * 4 + 0],
-				outputData[i * 4 + 1],
-				outputData[i * 4 + 2],
-			);
-		}
-
-		/*
-        for (let i = -10; i < 10; i++) {
-			for (let j = -10; j < 10; j++) {
-				addProbe(scene, i, 1, j);
-			}
-		}
-        
-		addProbe(scene, 2.8, 0.3, -2);
-		addProbe(scene, 2.8, 0.3, 2);
-		addProbe(scene, 2.8, 1.3, -2);
-		addProbe(scene, 2.8, 1.3, 2);
-        */
-		updateProbes(scene, renderer);
-		getLightProbes(scene, renderer);
+		computeDepthMap();
+		updateComputeProbes();
+		updateMaterials();
 	});
 
 	const skydomeMesh = new Skydome(
@@ -236,32 +237,70 @@ async function main() {
 		64,
 		64,
 		0x29a1ff,
-		0x2c2c2d,
+		0x1b1b1b,
 	);
 	skydomeMesh.setCamera(camera);
 	skydomeMesh.setScene(scene);
 
-	const ground = new Ground(50, 64, 0x2c2c2d);
+	const ground = new Ground(200, 64, 0x1b1b1b);
 	ground.setScene(scene);
 
 	const skyHelper = new VertexNormalsHelper(skydomeMesh.mesh, 1, 0xff0000);
 	skyHelper.visible = false;
 	scene.add(skyHelper);
 
-	async function animate() {
+	let angle = Math.atan2(2 - 11.5834, 2 - 8.5278);
+	const cx = 8.5278;
+	const cz = 11.5834;
+	const radius = 11.596;
+
+	async function animateAsync() {
+		if (carModel) {
+			angle -= 0.005;
+			carModel.position.x = cx + radius * Math.cos(angle);
+			carModel.position.z = cz + radius * Math.sin(angle);
+			carModel.rotation.y = -angle + Math.PI;
+			if (carModel.position.z > 12) angle -= 2.1;
+		}
 		controls.update();
 		render();
 	}
 
 	// compute shader
-	function updateCompute() {
+	function updateComputeSkydom() {
 		renderer.compute(updateComputeTexture);
 		renderer.compute(updateComputeCubemap);
 		renderer.compute(updateLightBuffer);
 		renderer.compute(updateIrradianceCubemap);
+	}
+
+	async function updateComputeProbes() {
+		clearProbes(scene);
+
+		await renderer.compute(updateProbePositions);
+		await renderer.compute(updateProbeVisibility);
+		await renderer.compute(updateDebugDepthMap);
+		await renderer.compute(updateDebugProbes);
+
+		const bufferArray = await renderer.getArrayBufferAsync(probePositions);
+		const outputData = new Float32Array(bufferArray);
+
+		for (let i = 0; i < PROBE_COUNT; i++) {
+			addProbe(
+				outputData[i * 4 + 0],
+				outputData[i * 4 + 1],
+				outputData[i * 4 + 2],
+			);
+		}
 
 		updateProbes(scene, renderer);
-		getLightProbes(scene, renderer);
+	}
+
+	function computeDepthMap() {
+		// debug RenderTarget switches to show depth map
+		renderer.setRenderTarget(renderTarget);
+		renderer.render(scene, testCamera);
+		renderer.setRenderTarget(null);
 	}
 
 	// DEBUG SECTION
@@ -345,7 +384,7 @@ async function main() {
 						avg += t;
 					});
 					times = [];
-					console.log(`GPU Render Time: ${avg / 100} ns`);
+					//console.log(`GPU Render Time: ${avg / 100} ns`);
 				}
 			});
 
@@ -354,7 +393,46 @@ async function main() {
 	// END OF DEBUG SECTION
 
 	scene.add(camera);
-	updateCompute();
+	updateComputeSkydom();
+
+	const textures = [];
+	function test(pos1, pos2) {
+		const target = new THREE.CubeRenderTarget(64, {
+			format: THREE.RGBAFormat,
+			type: THREE.FloatType,
+		});
+		const cubeCamera = new THREE.CubeCamera(0.01, 5, target);
+		cubeCamera.position.set(8.75, 0.3, 2);
+		cubeCamera.update(renderer, scene);
+		const sphereGeometry = new THREE.SphereGeometry(1, 32, 32);
+		const sphereMaterial = new THREE.MeshStandardNodeMaterial({
+			color: 0xffffff,
+			metalness: 1.0,
+			roughness: 0.0,
+			envMap: target.texture,
+		});
+		const mirrorSphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+		mirrorSphere.position.set(2, 2, 5);
+		scene.add(mirrorSphere);
+
+		const target1 = new THREE.CubeRenderTarget(64, {
+			format: THREE.RGBAFormat,
+			type: THREE.FloatType,
+		});
+		const cubeCamera1 = new THREE.CubeCamera(0.01, 5, target1);
+		cubeCamera1.position.set(8.75, 0.3, 9);
+		cubeCamera1.update(renderer, scene);
+		const sphereGeometry1 = new THREE.SphereGeometry(1, 32, 32);
+		const sphereMaterial1 = new THREE.MeshStandardNodeMaterial({
+			color: 0xffffff,
+			metalness: 1.0,
+			roughness: 0.1,
+			envMap: target1.texture,
+		});
+		const mirrorSphere1 = new THREE.Mesh(sphereGeometry1, sphereMaterial1);
+		mirrorSphere1.position.set(2, 2, 7);
+		scene.add(mirrorSphere1);
+	}
 
 	// SETTINGS
 
@@ -373,6 +451,14 @@ async function main() {
 		skydomsunY: 0.2,
 		skydomsunZ: 0.3,
 		skydomNevg: 0.3,
+		probeLight: false,
+		directLight: true,
+		probeHelpers: true,
+		irradianceLight: false,
+		probeGridSize: 5,
+		probeLightIntensity: 1.0,
+		directLightIntensity: 1.0,
+		irradianceLightIntensity: 0.5,
 	};
 	const pane = new Pane({
 		title: "Settings",
@@ -380,8 +466,10 @@ async function main() {
 	});
 
 	pane.addBinding(PARAMS, "shadows").on("change", (ev) => {
+		console.log("PAAAAAAAAAAANE");
 		renderer.shadowMap.enabled = ev.value;
 	});
+
 	pane
 		.addBinding(PARAMS, "isbackground", {
 			label: "background",
@@ -389,20 +477,7 @@ async function main() {
 		.on("change", (ev) => {
 			skydomeMesh.setBackground(ev.value);
 		});
-	pane
-		.addBinding(PARAMS, "shadowcamera", {
-			label: "shadow camera",
-		})
-		.on("change", (ev) => {
-			helperShadowCamera.visible = ev.value;
-		});
-	pane
-		.addBinding(PARAMS, "skydomenormals", {
-			label: "skydome normals",
-		})
-		.on("change", (ev) => {
-			skyHelper.visible = ev.value;
-		});
+
 	pane
 		.addBinding(PARAMS, "mapnormals", {
 			label: "map normals",
@@ -410,13 +485,7 @@ async function main() {
 		.on("change", (ev) => {
 			helpers.forEach((helper) => (helper.visible = ev.value));
 		});
-	/*pane
-		.addBinding(PARAMS, "skydomehalfsphere", {
-			label: "skydome halfsphere",
-		})
-		.on("change", (ev) => {
-			skydomeMesh.setHalfSphere(ev.value);
-		});*/
+
 	pane
 		.addBinding(PARAMS, "controls", {
 			options: {
@@ -442,6 +511,7 @@ async function main() {
 				controls.maxPolarAngle = Math.PI / 3;
 			}
 		});
+
 	pane
 		.addBinding(PARAMS, "skydomskycolor", {
 			label: "sky color",
@@ -481,8 +551,8 @@ async function main() {
 		.on("change", (ev) => {
 			sunDirection.x = ev.value;
 			skydomeMesh.setSunDirection(sunDirection);
-			light.position.copy(sunDirection);
-			updateCompute();
+			light.position.copy(sunDirection.normalize().multiplyScalar(10));
+			updateComputeSkydom();
 		});
 
 	pane
@@ -495,8 +565,8 @@ async function main() {
 		.on("change", (ev) => {
 			sunDirection.y = ev.value;
 			skydomeMesh.setSunDirection(sunDirection);
-			light.position.copy(sunDirection);
-			updateCompute();
+			light.position.copy(sunDirection.normalize().multiplyScalar(10));
+			updateComputeSkydom();
 		});
 
 	pane
@@ -509,8 +579,8 @@ async function main() {
 		.on("change", (ev) => {
 			sunDirection.z = ev.value;
 			skydomeMesh.setSunDirection(sunDirection);
-			light.position.copy(sunDirection);
-			updateCompute();
+			light.position.copy(sunDirection.normalize().multiplyScalar(10));
+			updateComputeSkydom();
 		});
 
 	pane
@@ -523,8 +593,123 @@ async function main() {
 		.on("change", (ev) => {
 			skydomNevg = ev.value;
 			skydomeMesh.setNevg(skydomNevg);
-			updateCompute();
+			updateComputeSkydom();
 		});
+
+	// включение/выключение освещения от проб
+	pane
+		.addBinding(PARAMS, "probeLight", {
+			label: "probe light",
+		})
+		.on("change", (ev) => {
+			probeLightUniform.value = ev.value;
+		});
+
+	// включение/выключение направленного света
+	pane
+		.addBinding(PARAMS, "directLight", {
+			label: "direct light",
+		})
+		.on("change", (ev) => {
+			directLightUniform.value = ev.value;
+		});
+
+	// включение/выключение хелперов проб
+	pane
+		.addBinding(PARAMS, "probeHelpers", {
+			label: "probe helpers",
+		})
+		.on("change", (ev) => {
+			if (ev.value) {
+				showLightProbeHelpers();
+			} else {
+				hideLightProbeHelpers();
+			}
+		});
+
+	// включение/выключение irradiance cubemap (плюсом к текущему)
+	pane
+		.addBinding(PARAMS, "irradianceLight", {
+			label: "irradiance light",
+		})
+		.on("change", (ev) => {
+			irradianceLightUniform.value = ev.value;
+		});
+
+	// TODO
+	// изменение количества проб
+	// pane
+	// 	.addBinding(PARAMS, "probeGridSize", {
+	// 		label: "probe grid size",
+	// 		min: 0,
+	// 		max: 15,
+	// 		step: 1,
+	// 	})
+	// 	.on("change", async (ev) => {
+	// 		if (!ev.last) return;
+	// 		updateGridSize(ev.value);
+	// 		updateDebugProbes = debugProbes().compute(ev.value * ev.value);
+	// 		gridWidthUniform.value = ev.value;
+	// 		gridHeightUniform.value = ev.value;
+	// 		probeCountUniform.value = ev.value * ev.value;
+	// 		await updateComputeProbes();
+	// 	});
+
+	// изменение яркости небосвода
+	pane
+		.addBinding(PARAMS, "probeLightIntensity", {
+			label: "probe intensity",
+			min: 0,
+			max: 2,
+			step: 0.01,
+		})
+		.on("change", (ev) => {
+			probeLightIntensityUniform.value = ev.value;
+		});
+	pane
+		.addBinding(PARAMS, "directLightIntensity", {
+			label: "direct intensity",
+			min: 0,
+			max: 2,
+			step: 0.01,
+		})
+		.on("change", (ev) => {
+			directLightIntensityUniform.value = ev.value;
+		});
+	pane
+		.addBinding(PARAMS, "irradianceLightIntensity", {
+			label: "irradiance intensity",
+			min: 0,
+			max: 1,
+			step: 0.01,
+		})
+		.on("change", (ev) => {
+			irradianceLightIntensityUniform.value = ev.value;
+		});
+
+	/*
+	pane
+		.addBinding(PARAMS, "shadowcamera", {
+			label: "shadow camera",
+		})
+		.on("change", (ev) => {
+			helperShadowCamera.visible = ev.value;
+		});
+	pane
+		.addBinding(PARAMS, "skydomenormals", {
+			label: "skydome normals",
+		})
+		.on("change", (ev) => {
+			skyHelper.visible = ev.value;
+		});
+	pane
+		.addBinding(PARAMS, "skydomehalfsphere", {
+			label: "skydome halfsphere",
+		})
+		.on("change", (ev) => {
+			skydomeMesh.setHalfSphere(ev.value);
+        });
+    */
 }
 
 main();

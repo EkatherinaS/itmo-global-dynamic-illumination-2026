@@ -4,6 +4,7 @@ import { getIrradianceColor } from "./irradiance-texture";
 import { computeGlobalLight } from "./global-light";
 import { Fn } from "three/src/nodes/TSL.js";
 import { float, color } from "three/tsl";
+import { GRID_HEIGHT, GRID_WIDTH, PROBE_COUNT } from "./constants";
 
 class BoundingBox {
 	constructor(x, y) {
@@ -176,8 +177,6 @@ class Model {
 				color: randcolor,
 				flatShading: false,
 			});
-			// ENABLE to turn on light from probes
-			material.outputNode = computeGlobalLight();
 
 			const geometry = polyline.getGeometry();
 			geometry.computeVertexNormals();
@@ -187,6 +186,13 @@ class Model {
 			mesh.receiveShadow = true;
 			group.add(mesh);
 		});
+		group.position.set(0, 0, 0);
+		group.scale.set(0.01, 0.01, 0.01);
+		group.rotateX(-Math.PI / 2);
+		new THREE.Box3()
+			.setFromObject(group)
+			.getCenter(group.position)
+			.multiply(new THREE.Vector3(-1, 0, -1));
 		return group;
 	}
 }
