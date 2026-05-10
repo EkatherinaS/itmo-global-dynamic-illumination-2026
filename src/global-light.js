@@ -61,6 +61,7 @@ import {
 	bool,
 	normalWorld,
 	sqrt,
+	not,
 } from "three/tsl";
 import { getIrradianceColor } from "./irradiance-texture";
 import { normalize } from "three/src/math/MathUtils.js";
@@ -68,6 +69,8 @@ import { normalize } from "three/src/math/MathUtils.js";
 export const probeLightUniform = uniform(false);
 export const directLightUniform = uniform(true);
 export const irradianceLightUniform = uniform(false);
+export const considerAngleUniform = uniform(true);
+export const useStreetGridUniform = uniform(true);
 
 export const probeLightIntensityUniform = uniform(float(1));
 export const directLightIntensityUniform = uniform(float(1));
@@ -158,29 +161,49 @@ const getNeighbouringProbesStreetGrid = Fn(([uv]) => {
 	return result;
 });
 
-const getNeighbouringProbesRegularGrid = Fn(([pos]) => {
+const getNeighbouringProbesRegularGrid = Fn(([uv]) => {
 	const rangeWidth = float(DEPTH_WIDTH).div(gridWidthUniform);
 	const rangeHeight = float(DEPTH_HEIGHT).div(gridHeightUniform);
 
-	const uv = getDepthUVFromWorldCoords(pos);
 	const i = floor(float(uv.x).div(rangeWidth));
 	const j = floor(float(uv.y).div(rangeHeight));
 
-	const iPair = i.add(1);
-	const jPair = j.add(1);
+	const iPairAdd = i.add(1);
+	const jPairAdd = j.add(1);
 
 	const layerSize = float(probeCountUniform).div(2);
 
-	return array([
+	const result = array([
 		j.mul(gridWidthUniform).add(i),
-		jPair.mul(gridWidthUniform).add(i),
-		j.mul(gridWidthUniform).add(iPair),
-		jPair.mul(gridWidthUniform).add(iPair),
 		j.mul(gridWidthUniform).add(i).add(layerSize),
-		jPair.mul(gridWidthUniform).add(i).add(layerSize),
-		j.mul(gridWidthUniform).add(iPair).add(layerSize),
-		jPair.mul(gridWidthUniform).add(iPair).add(layerSize),
+
+		jPairAdd.mul(gridWidthUniform).add(i),
+		jPairAdd.mul(gridWidthUniform).add(i).add(layerSize),
+
+		j.mul(gridWidthUniform).add(iPairAdd),
+		j.mul(gridWidthUniform).add(iPairAdd).add(layerSize),
+
+		jPairAdd.mul(gridWidthUniform).add(iPairAdd),
+		jPairAdd.mul(gridWidthUniform).add(iPairAdd).add(layerSize),
+
+		int(-1),
 	]);
+
+	If(iPairAdd.equal(gridWidthUniform), () => {
+		result.element(4).assign(-1);
+		result.element(5).assign(-1);
+		result.element(6).assign(-1);
+		result.element(7).assign(-1);
+	});
+
+	If(jPairAdd.equal(gridHeightUniform), () => {
+		result.element(2).assign(-1);
+		result.element(3).assign(-1);
+		result.element(6).assign(-1);
+		result.element(7).assign(-1);
+	});
+
+	return result;
 });
 
 export const debugDepthMap = Fn(() => {
@@ -240,7 +263,17 @@ export const computeProbeVisibility = Fn(() => {
 	const uv = vec2(u, v);
 	const pos = getWorldCoordsFromDepthUV(uv);
 
-	const probeInds = getNeighbouringProbesStreetGrid(uv);
+	let probeInds = array("int", 9).toVar();
+	const street = getNeighbouringProbesStreetGrid(uv);
+	const regular = getNeighbouringProbesRegularGrid(uv);
+	Loop(9, ({ i }) => {
+		If(useStreetGridUniform, () => {
+			probeInds.element(i).assign(street.element(i));
+		}).Else(() => {
+			probeInds.element(i).assign(regular.element(i));
+		});
+	});
+
 	const probesAll = storage(probePositions, "vec4", probeCountUniform);
 	const probesVis = storage(visibleProbes, "vec4", DEPTH_HEIGHT * DEPTH_WIDTH);
 	const results = probeInds;
@@ -535,6 +568,17 @@ export const computeProbeLight = Fn(() => {
 	const probesAll = storage(probePositions, "vec4", probeCountUniform);
 	const probesVis = storage(visibleProbes, "vec4", DEPTH_HEIGHT * DEPTH_WIDTH);
 
+	const result = vec4(0);
+	const uv = getDepthUVFromWorldCoords(positionWorld.xz);
+	const ind = uint(uv.y).mul(DEPTH_WIDTH).add(uv.x);
+
+	const probeInds = array([
+		probesVis.element(ind).x,
+		probesVis.element(ind).y,
+		probesVis.element(ind).z,
+		probesVis.element(ind).w,
+	]);
+
 	const dir = negate(positionLocal.normalize());
 	const x = float(dir.x);
 	const y = float(dir.y);
@@ -551,16 +595,6 @@ export const computeProbeLight = Fn(() => {
 		float(0.315392).mul(float(3).mul(z).mul(z).sub(1)),
 		float(1.092548).mul(x).mul(z),
 		float(0.546274).mul(x.mul(x).sub(y.mul(y))),
-	]);
-
-	const result = vec4(0);
-	const uv = getDepthUVFromWorldCoords(positionWorld.xz);
-	const ind = uint(uv.y).mul(DEPTH_WIDTH).add(uv.x);
-	const probeInds = array([
-		probesVis.element(ind).x,
-		probesVis.element(ind).y,
-		probesVis.element(ind).z,
-		probesVis.element(ind).w,
 	]);
 
 	const totalInvDist = float(0);
@@ -598,10 +632,17 @@ export const computeProbeLight = Fn(() => {
 	const direction2 = probe2.xyz.sub(positionWorld).normalize();
 	const direction3 = probe3.xyz.sub(positionWorld).normalize();
 
-	const dot0 = min(float(1.5), max(float(0), direction0.dot(normalWorld)));
-	const dot1 = min(float(1.5), max(float(0), direction1.dot(normalWorld)));
-	const dot2 = min(float(1.5), max(float(0), direction2.dot(normalWorld)));
-	const dot3 = min(float(1.5), max(float(0), direction3.dot(normalWorld)));
+	const dot0 = float(1.0);
+	const dot1 = float(1.0);
+	const dot2 = float(1.0);
+	const dot3 = float(1.0);
+
+	If(considerAngleUniform, () => {
+		dot0.assign(min(float(1.5), max(float(0), direction0.dot(normalWorld))));
+		dot1.assign(min(float(1.5), max(float(0), direction1.dot(normalWorld))));
+		dot2.assign(min(float(1.5), max(float(0), direction2.dot(normalWorld))));
+		dot3.assign(min(float(1.5), max(float(0), direction3.dot(normalWorld))));
+	});
 
 	Loop(SH_COEFFICIENTS_COUNT, ({ i }) => {
 		const coefInd = uint(i);

@@ -22,7 +22,10 @@ export let PROBE_COUNT = GRID_WIDTH * GRID_HEIGHT;
 export function updateGridSize(size) {
 	GRID_WIDTH = size;
 	GRID_HEIGHT = size;
-	PROBE_COUNT = size * size;
+}
+
+export function updateProbeCount(size) {
+	PROBE_COUNT = size;
 }
 
 export const luminanceStorageTexture = new THREE.StorageTexture(WIDTH, HEIGHT);

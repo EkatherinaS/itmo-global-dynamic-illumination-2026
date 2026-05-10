@@ -40,6 +40,7 @@ import {
 	probePositions,
 	sphericalHarmonics,
 	updateGridSize,
+	updateProbeCount,
 	WIDTH,
 } from "./constants";
 import {
@@ -54,6 +55,7 @@ import {
 	computeProbeVisibility,
 	computeRegularGridProbePositions,
 	computeStreetGridProbePositions,
+	considerAngleUniform,
 	debugDepthMap,
 	debugProbes,
 	directLightIntensityUniform,
@@ -65,6 +67,7 @@ import {
 	probeCountUniform,
 	probeLightIntensityUniform,
 	probeLightUniform,
+	useStreetGridUniform,
 } from "./global-light.js";
 import { int, uint } from "three/tsl";
 
@@ -83,7 +86,7 @@ async function main() {
 	renderer.setSize(window.innerWidth, window.innerHeight);
 	renderer.setAnimationLoop(animateAsync);
 	renderer.shadowMap.enabled = true;
-	renderer.shadowMap.type = THREE.BasicShadowMap;
+	renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 	renderer.toneMapping = THREE.NoToneMapping;
 	document.body.appendChild(renderer.domElement);
 
@@ -148,7 +151,6 @@ async function main() {
 	let updateIrradianceCubemap =
 		computeIrradianceCubemapFromLightBuffer().compute(12 * WIDTH * HEIGHT);
 
-	// CHANGE to switch between probe grids
 	let updateProbePositions = computeStreetGridProbePositions().compute(
 		DEPTH_WIDTH * DEPTH_HEIGHT,
 	);
@@ -455,10 +457,12 @@ async function main() {
 		directLight: true,
 		probeHelpers: true,
 		irradianceLight: false,
-		probeGridSize: 5,
+		probeGridSize: 8,
 		probeLightIntensity: 1.0,
 		directLightIntensity: 1.0,
 		irradianceLightIntensity: 0.5,
+		considerAngle: true,
+		probeGrid: "street",
 	};
 	const pane = new Pane({
 		title: "Settings",
@@ -466,7 +470,6 @@ async function main() {
 	});
 
 	pane.addBinding(PARAMS, "shadows").on("change", (ev) => {
-		console.log("PAAAAAAAAAAANE");
 		renderer.shadowMap.enabled = ev.value;
 	});
 
@@ -521,6 +524,7 @@ async function main() {
 			skydomeMesh.setSkyColor(ev.value);
 			scene.background = new THREE.Color(ev.value);
 			scene.fog = new THREE.FogExp2(ev.value, 0.002);
+			updateProbes(scene, renderer);
 		});
 
 	pane
@@ -553,6 +557,7 @@ async function main() {
 			skydomeMesh.setSunDirection(sunDirection);
 			light.position.copy(sunDirection.normalize().multiplyScalar(10));
 			updateComputeSkydom();
+			updateProbes(scene, renderer);
 		});
 
 	pane
@@ -567,6 +572,7 @@ async function main() {
 			skydomeMesh.setSunDirection(sunDirection);
 			light.position.copy(sunDirection.normalize().multiplyScalar(10));
 			updateComputeSkydom();
+			updateProbes(scene, renderer);
 		});
 
 	pane
@@ -581,6 +587,7 @@ async function main() {
 			skydomeMesh.setSunDirection(sunDirection);
 			light.position.copy(sunDirection.normalize().multiplyScalar(10));
 			updateComputeSkydom();
+			updateProbes(scene, renderer);
 		});
 
 	pane
@@ -594,6 +601,7 @@ async function main() {
 			skydomNevg = ev.value;
 			skydomeMesh.setNevg(skydomNevg);
 			updateComputeSkydom();
+			updateProbes(scene, renderer);
 		});
 
 	// включение/выключение освещения от проб
@@ -647,10 +655,17 @@ async function main() {
 		.on("change", async (ev) => {
 			if (!ev.last) return;
 			updateGridSize(ev.value);
-			updateDebugProbes = debugProbes().compute(ev.value * ev.value);
+			if (useStreetGridUniform.value) {
+				updateProbeCount(ev.value * ev.value);
+				updateDebugProbes = debugProbes().compute(ev.value * ev.value);
+				probeCountUniform.value = ev.value * ev.value;
+			} else {
+				updateProbeCount(ev.value * ev.value * 2);
+				updateDebugProbes = debugProbes().compute(ev.value * ev.value * 2);
+				probeCountUniform.value = ev.value * ev.value * 2;
+			}
 			gridWidthUniform.value = ev.value;
 			gridHeightUniform.value = ev.value;
-			probeCountUniform.value = ev.value * ev.value;
 			await updateComputeProbes();
 		});
 
@@ -684,6 +699,40 @@ async function main() {
 		})
 		.on("change", (ev) => {
 			irradianceLightIntensityUniform.value = ev.value;
+		});
+	pane
+		.addBinding(PARAMS, "considerAngle", {
+			label: "consider angle",
+		})
+		.on("change", (ev) => {
+			considerAngleUniform.value = ev.value;
+		});
+
+	pane
+		.addBinding(PARAMS, "probeGrid", {
+			options: {
+				street: "street",
+				regular: "regular",
+			},
+		})
+		.on("change", async (ev) => {
+			if (!ev.last) return;
+			if (ev.value === "street") {
+				updateProbePositions = computeStreetGridProbePositions().compute(
+					DEPTH_WIDTH * DEPTH_HEIGHT,
+				);
+				updateProbeCount(GRID_HEIGHT * GRID_WIDTH);
+				updateDebugProbes = debugProbes().compute(GRID_HEIGHT * GRID_WIDTH);
+				probeCountUniform.value = GRID_HEIGHT * GRID_WIDTH;
+			} else {
+				updateProbePositions = computeRegularGridProbePositions().compute(
+					DEPTH_WIDTH * DEPTH_HEIGHT * 2,
+				);
+				updateProbeCount(GRID_HEIGHT * GRID_WIDTH * 2);
+				updateDebugProbes = debugProbes().compute(GRID_HEIGHT * GRID_WIDTH * 2);
+				probeCountUniform.value = GRID_HEIGHT * GRID_WIDTH * 2;
+			}
+			await updateComputeProbes();
 		});
 
 	/*
