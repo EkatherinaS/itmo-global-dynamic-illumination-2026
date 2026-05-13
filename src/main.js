@@ -1,29 +1,14 @@
 import "./style.css";
 
-import * as THREE from "three/webgpu";
-import { Inspector } from "three/examples/jsm/inspector/Inspector.js";
-import { DXFLoader } from "./dxf-countour-loader.js";
-import { MapControls } from "three/examples/jsm/controls/MapControls.js";
-import { Pane } from "tweakpane";
 import {
-	GLTFLoader,
 	OrbitControls,
 	VertexNormalsHelper,
 } from "three/examples/jsm/Addons.js";
-import { Ground } from "./ground.js";
-import {
-	computeLuminanceTexture,
-	computeLuminanceCubemap,
-	getLuminanceCubemap,
-	getLuminanceColor,
-} from "./luminance-texture.js";
-import { Skydome } from "./skydome.js";
-import {
-	computeIrradianceCubemapFromLightBuffer,
-	getIrradianceTexture,
-	computeLightBuffer,
-	getIrradianceColor,
-} from "./irradiance-texture.js";
+import { MapControls } from "three/examples/jsm/controls/MapControls.js";
+import { Inspector } from "three/examples/jsm/inspector/Inspector.js";
+import Stats from "stats-js";
+import * as THREE from "three/webgpu";
+import { Pane } from "tweakpane";
 import {
 	DEPTH_CAMERA_BOTTOM,
 	DEPTH_CAMERA_LEFT,
@@ -38,18 +23,10 @@ import {
 	HEIGHT,
 	PROBE_COUNT,
 	probePositions,
-	sphericalHarmonics,
 	updateGridSize,
 	updateProbeCount,
 	WIDTH,
 } from "./constants";
-import {
-	addProbe,
-	clearProbes,
-	hideLightProbeHelpers,
-	showLightProbeHelpers,
-	updateProbes,
-} from "./probe.js";
 import {
 	computeGlobalLight,
 	computeProbeVisibility,
@@ -69,7 +46,38 @@ import {
 	probeLightUniform,
 	useStreetGridUniform,
 } from "./global-light.js";
-import { int, uint } from "three/tsl";
+import { Ground } from "./ground.js";
+import {
+	computeIrradianceCubemapFromLightBuffer,
+	computeLightBuffer,
+	getIrradianceColor,
+	getIrradianceTexture,
+} from "./irradiance-texture.js";
+import {
+	computeLuminanceCubemap,
+	computeLuminanceTexture,
+	getLuminanceColor,
+	getLuminanceCubemap,
+} from "./luminance-texture.js";
+import {
+	addCar,
+	addMap,
+	loadCar,
+	loadMapDxf,
+	loadMapGlb,
+	moveCar,
+	showMapNormals,
+	updateMaterials,
+} from "./models.js";
+import {
+	addProbe,
+	clearProbes,
+	hideLightProbeHelpers,
+	showLightProbeHelpers,
+	updateProbes,
+} from "./probe.js";
+import { Skydome } from "./skydome.js";
+import { getWebGPUMemoryUsage } from "webgpu-memory";
 
 async function main() {
 	const adapter = await navigator.gpu.requestAdapter();
@@ -92,6 +100,8 @@ async function main() {
 
 	renderer.inspector = new Inspector();
 	document.body.appendChild(renderer.inspector.domElement);
+	const stats = new Stats();
+	document.body.appendChild(stats.dom);
 
 	const scene = new THREE.Scene();
 
@@ -177,67 +187,11 @@ async function main() {
 
 	await renderer.init();
 
-	const loader = new GLTFLoader();
-	let carModel, mapModel;
-
-	loader.load(
-		//"public/models/gol_quadrado.glb",
-		"public/models/porsche_911.glb",
-		(gltf) => {
-			const model = gltf.scene;
-			const material = new THREE.MeshPhongNodeMaterial({
-				color: 0xffffff,
-				flatShading: false,
-			});
-			model.traverse((o) => {
-				if (o.isMesh) o.material = material;
-			});
-			model.position.set(2, 0, 1.5);
-			model.scale.set(0.2, 0.2, 0.2);
-			model.rotateY(-1);
-			carModel = model;
-		},
-		undefined,
-		(error) => {
-			console.error(error);
-		},
-	);
-
-	function updateMaterials() {
-		carModel.traverse((o) => {
-			if (o.isMesh) o.material.outputNode = computeGlobalLight();
-		});
-		scene.add(carModel);
-		mapModel.traverse((o) => {
-			if (o.isMesh) o.material.outputNode = computeGlobalLight();
-		});
-		ground.setMaterialOutputNode(computeGlobalLight());
-	}
-
-	const dxfloader = new DXFLoader();
-	const helpers = [];
-	dxfloader.load("public/models/contours.dxf", function (model) {
-		const group = model.model;
-		group.children.forEach((mesh) => {
-			helpers.push(new VertexNormalsHelper(mesh, 10, 0xff0000, 10));
-		});
-		helpers.forEach((helper) => {
-			group.add(helper);
-			helper.visible = false;
-		});
-		mapModel = group;
-		scene.add(mapModel);
-
-		computeDepthMap();
-		updateComputeProbes();
-		updateMaterials();
-	});
-
 	const skydomeMesh = new Skydome(
 		sunDirection,
 		skydomNevg,
 		64,
-		64,
+		8,
 		0x29a1ff,
 		0x1b1b1b,
 	);
@@ -247,25 +201,28 @@ async function main() {
 	const ground = new Ground(200, 64, 0x1b1b1b);
 	ground.setScene(scene);
 
+	loadMapDxf(() => {
+		addMap(scene);
+		console.log(renderer.info);
+		computeDepthMap();
+		updateComputeProbes();
+		loadCar(() => {
+			addCar(scene);
+		});
+		//updateMaterials();
+		ground.setMaterialOutputNode(computeGlobalLight);
+	});
+
 	const skyHelper = new VertexNormalsHelper(skydomeMesh.mesh, 1, 0xff0000);
 	skyHelper.visible = false;
 	scene.add(skyHelper);
 
-	let angle = Math.atan2(2 - 11.5834, 2 - 8.5278);
-	const cx = 8.5278;
-	const cz = 11.5834;
-	const radius = 11.596;
-
 	async function animateAsync() {
-		if (carModel) {
-			angle -= 0.005;
-			carModel.position.x = cx + radius * Math.cos(angle);
-			carModel.position.z = cz + radius * Math.sin(angle);
-			carModel.rotation.y = -angle + Math.PI;
-			if (carModel.position.z > 12) angle -= 2.1;
-		}
+		stats.begin();
+		moveCar();
 		controls.update();
 		render();
+		stats.end();
 	}
 
 	// compute shader
@@ -286,7 +243,6 @@ async function main() {
 
 		const bufferArray = await renderer.getArrayBufferAsync(probePositions);
 		const outputData = new Float32Array(bufferArray);
-
 		for (let i = 0; i < PROBE_COUNT; i++) {
 			addProbe(
 				outputData[i * 4 + 0],
@@ -296,6 +252,11 @@ async function main() {
 		}
 
 		await updateProbes(scene, renderer);
+
+		const mem = getWebGPUMemoryUsage().memory;
+		console.log(`Буферы: ${(mem.buffer / 1048576).toFixed(2)} MB`);
+		console.log(`Текстуры: ${(mem.texture / 1048576).toFixed(2)} MB`);
+		console.log(`Всего: ${(mem.total / 1048576).toFixed(2)} MB`);
 	}
 
 	function computeDepthMap() {
@@ -304,6 +265,27 @@ async function main() {
 		renderer.render(scene, testCamera);
 		renderer.setRenderTarget(null);
 	}
+
+	// POINT LIGHTS
+	// const lightPositions = [
+	// 	[3, 0.5, -2],
+	// 	[2, 0.5, 2],
+	// 	[8, 0.5, 0],
+	// 	[3, 0.5, 9],
+	// 	[-1, 0.5, 7],
+	// ];
+	// for (let i = 0; i < lightPositions.length; i++) {
+	// 	const pos = lightPositions[i];
+
+	// 	const pointLight = new THREE.PointLight(0xffffff, 20, 10, 2);
+	//     pointLight.position.set(pos[0], pos[1], pos[2]);
+	//     pointLight.castShadow = true;
+	// 	scene.add(pointLight);
+
+	// 	const sphereSize = 0.1;
+	// 	const pointLightHelper = new THREE.PointLightHelper(pointLight, sphereSize);
+	// 	scene.add(pointLightHelper);
+	// }
 
 	// DEBUG SECTION
 
@@ -354,12 +336,13 @@ async function main() {
 	const plane = new THREE.Mesh(new THREE.PlaneGeometry(0.004, 0.004), material);
 	camera.add(plane);
 
-	let times = [];
+	//let times = [];
 	function render() {
-		const canvas = renderer.domElement;
 		const width = window.innerWidth;
 		const height = window.innerHeight;
-		const needResize = canvas.width != width || canvas.height != height;
+		const needResize =
+			renderer.domElement.width != width ||
+			renderer.domElement.height != height;
 
 		if (needResize) {
 			renderer.setSize(window.innerWidth, window.innerHeight);
@@ -375,20 +358,20 @@ async function main() {
 		icosahedromMaterialLuminance.colorNode = getLuminanceColor();
 		icosahedromMaterialIrradiance.colorNode = getIrradianceColor();
 
-		renderer
-			.resolveTimestampsAsync(THREE.TimestampQuery.RENDER)
-			.then((result) => {
-				if (times.length < 100) {
-					times.push(result);
-				} else {
-					let avg = 0;
-					times.forEach((t) => {
-						avg += t;
-					});
-					times = [];
-					//console.log(`GPU Render Time: ${avg / 100} ns`);
-				}
-			});
+		// renderer
+		// 	.resolveTimestampsAsync(THREE.TimestampQuery.RENDER)
+		// 	.then((result) => {
+		// 		if (times.length < 100) {
+		// 			times.push(result);
+		// 		} else {
+		// 			let avg = 0;
+		// 			times.forEach((t) => {
+		// 				avg += t;
+		// 			});
+		// 			times = [];
+		// 			//console.log(`GPU Render Time: ${avg / 100} ns`);
+		// 		}
+		// 	});
 
 		renderer.render(scene, camera);
 	}
@@ -396,45 +379,6 @@ async function main() {
 
 	scene.add(camera);
 	updateComputeSkydom();
-
-	const textures = [];
-	function test(pos1, pos2) {
-		const target = new THREE.CubeRenderTarget(64, {
-			format: THREE.RGBAFormat,
-			type: THREE.FloatType,
-		});
-		const cubeCamera = new THREE.CubeCamera(0.01, 5, target);
-		cubeCamera.position.set(8.75, 0.3, 2);
-		cubeCamera.update(renderer, scene);
-		const sphereGeometry = new THREE.SphereGeometry(1, 32, 32);
-		const sphereMaterial = new THREE.MeshStandardNodeMaterial({
-			color: 0xffffff,
-			metalness: 1.0,
-			roughness: 0.0,
-			envMap: target.texture,
-		});
-		const mirrorSphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-		mirrorSphere.position.set(2, 2, 5);
-		scene.add(mirrorSphere);
-
-		const target1 = new THREE.CubeRenderTarget(64, {
-			format: THREE.RGBAFormat,
-			type: THREE.FloatType,
-		});
-		const cubeCamera1 = new THREE.CubeCamera(0.01, 5, target1);
-		cubeCamera1.position.set(8.75, 0.3, 9);
-		cubeCamera1.update(renderer, scene);
-		const sphereGeometry1 = new THREE.SphereGeometry(1, 32, 32);
-		const sphereMaterial1 = new THREE.MeshStandardNodeMaterial({
-			color: 0xffffff,
-			metalness: 1.0,
-			roughness: 0.1,
-			envMap: target1.texture,
-		});
-		const mirrorSphere1 = new THREE.Mesh(sphereGeometry1, sphereMaterial1);
-		mirrorSphere1.position.set(2, 2, 7);
-		scene.add(mirrorSphere1);
-	}
 
 	// SETTINGS
 
@@ -486,7 +430,7 @@ async function main() {
 			label: "map normals",
 		})
 		.on("change", (ev) => {
-			helpers.forEach((helper) => (helper.visible = ev.value));
+			showMapNormals();
 		});
 
 	pane
@@ -506,7 +450,6 @@ async function main() {
 			}
 			if (ev.value === "map") {
 				camera.position.set(0, 10, 0);
-
 				controls = new MapControls(camera, controls.domElement);
 				controls.enableDamping = true;
 				controls.dampingFactor = 0.25;
@@ -522,6 +465,8 @@ async function main() {
 		})
 		.on("change", (ev) => {
 			skydomeMesh.setSkyColor(ev.value);
+			scene.background.dispose();
+			scene.fog.dispose();
 			scene.background = new THREE.Color(ev.value);
 			scene.fog = new THREE.FogExp2(ev.value, 0.002);
 			updateProbes(scene, renderer);
@@ -649,13 +594,18 @@ async function main() {
 		.addBinding(PARAMS, "probeGridSize", {
 			label: "probe grid size",
 			min: 0,
-			max: 15,
+			max: 20,
 			step: 1,
 		})
 		.on("change", async (ev) => {
 			if (!ev.last) return;
+
+			updateDebugProbes.dispose();
+			gridWidthUniform.value = ev.value;
+			gridHeightUniform.value = ev.value;
+
 			updateGridSize(ev.value);
-			if (useStreetGridUniform.value) {
+			if (PROBE_COUNT === GRID_WIDTH * GRID_HEIGHT) {
 				updateProbeCount(ev.value * ev.value);
 				updateDebugProbes = debugProbes().compute(ev.value * ev.value);
 				probeCountUniform.value = ev.value * ev.value;
@@ -664,8 +614,7 @@ async function main() {
 				updateDebugProbes = debugProbes().compute(ev.value * ev.value * 2);
 				probeCountUniform.value = ev.value * ev.value * 2;
 			}
-			gridWidthUniform.value = ev.value;
-			gridHeightUniform.value = ev.value;
+
 			await updateComputeProbes();
 		});
 
@@ -717,6 +666,10 @@ async function main() {
 		})
 		.on("change", async (ev) => {
 			if (!ev.last) return;
+
+			updateDebugProbes.dispose();
+			updateProbePositions.dispose();
+
 			if (ev.value === "street") {
 				updateProbePositions = computeStreetGridProbePositions().compute(
 					DEPTH_WIDTH * DEPTH_HEIGHT,
@@ -732,6 +685,7 @@ async function main() {
 				updateDebugProbes = debugProbes().compute(GRID_HEIGHT * GRID_WIDTH * 2);
 				probeCountUniform.value = GRID_HEIGHT * GRID_WIDTH * 2;
 			}
+
 			await updateComputeProbes();
 		});
 

@@ -11,19 +11,24 @@ import {
 let cameras = [];
 let helpers = [];
 
-export const clearProbes = (scene) => {
+export const clearHelpers = (scene) => {
 	helpers.forEach((helper) => {
+		helper.dispose();
 		scene.remove(helper);
 	});
-
-	cameras.forEach((camera) => {
-		camera.clear();
-		camera.renderTarget.textures[0].dispose();
-		camera.renderTarget.dispose();
-	});
-
-	cameras = [];
 	helpers = [];
+};
+
+export const clearProbes = (scene) => {
+	cameras.forEach((camera) => {
+		for (let i = 0; i < camera.renderTarget.textures.length; i++) {
+			camera.renderTarget.textures[i].dispose();
+		}
+		camera.renderTarget.dispose();
+		camera.clear();
+		scene.remove(camera);
+	});
+	cameras = [];
 };
 
 export const addProbe = (x, y, z) => {
@@ -39,6 +44,7 @@ export const addProbe = (x, y, z) => {
 export const updateProbes = async (scene, renderer) => {
 	const blockSize = SH_COEFFICIENTS_COUNT * 4;
 	const data = new Float32Array(blockSize * PROBE_COUNT);
+	clearHelpers(scene);
 
 	for (let i = 0; i < cameras.length; i++) {
 		const camera = cameras[i];

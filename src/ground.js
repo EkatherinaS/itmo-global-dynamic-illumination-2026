@@ -1,14 +1,6 @@
 import * as THREE from "three/webgpu";
 
-import {
-	positionLocal,
-	normalLocal,
-	vec3,
-	vec4,
-	float,
-	uniform,
-} from "three/tsl";
-import { computeGlobalLight } from "./global-light";
+import { float, positionLocal, vec3, vec4 } from "three/tsl";
 
 export class Ground {
 	constructor(radius, segments, groundColor) {
@@ -72,8 +64,8 @@ export class Ground {
 		return plane;
 	}
 
-	setMaterialOutputNode(value) {
-		this.material.outputNode = value;
+	setMaterialOutputNode(computeValue) {
+		this.material.outputNode = computeValue();
 		this.material.needsUpdate = true;
 	}
 }
