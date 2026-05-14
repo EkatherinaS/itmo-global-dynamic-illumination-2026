@@ -1,13 +1,16 @@
 import "./style.css";
 
 import {
+	HorizontalBlurShader,
 	OrbitControls,
 	VertexNormalsHelper,
+	VerticalBlurShader,
 } from "three/examples/jsm/Addons.js";
 import { MapControls } from "three/examples/jsm/controls/MapControls.js";
 import { Inspector } from "three/examples/jsm/inspector/Inspector.js";
 import Stats from "stats-js";
 import * as THREE from "three/webgpu";
+import { hashBlur } from "three/addons/tsl/display/hashBlur.js";
 import { Pane } from "tweakpane";
 import {
 	DEPTH_CAMERA_BOTTOM,
@@ -25,9 +28,11 @@ import {
 	PROBE_COUNT,
 	PROBE_GRID_TYPE,
 	probePositions,
+	tempTexture,
 	updateGridSize,
 	updateLayerCount,
 	updateProbeGridType,
+	visibilityStrength,
 	WIDTH,
 } from "./constants";
 import {
@@ -42,12 +47,14 @@ import {
 	directLightUniform,
 	gridHeightUniform,
 	gridWidthUniform,
+	horizontalBlurShader,
 	irradianceLightIntensityUniform,
 	irradianceLightUniform,
 	probeCountUniform,
 	probeLightIntensityUniform,
 	probeLightUniform,
 	useStreetGridUniform,
+	verticalBlurShader,
 } from "./global-light.js";
 import { Ground } from "./ground.js";
 import {
@@ -90,8 +97,7 @@ async function main() {
 
 	const renderer = new THREE.WebGPURenderer({
 		canvas,
-		antialias: true,
-		trackTimestamp: true,
+		//trackTimestamp: true,
 	});
 	renderer.setPixelRatio(window.devicePixelRatio);
 	renderer.setSize(window.innerWidth, window.innerHeight);
@@ -103,6 +109,7 @@ async function main() {
 
 	renderer.inspector = new Inspector();
 	document.body.appendChild(renderer.inspector.domElement);
+
 	const stats = new Stats();
 	document.body.appendChild(stats.dom);
 
@@ -170,6 +177,12 @@ async function main() {
 	let updateDebugDepthMap = debugDepthMap().compute(DEPTH_WIDTH * DEPTH_HEIGHT);
 	let updateDebugProbes = debugProbes().compute(PROBE_COUNT);
 	let updateProbeVisibility = computeProbeVisibility().compute(
+		DEPTH_WIDTH * DEPTH_HEIGHT,
+	);
+	let updateVerticalBlurShader = verticalBlurShader().compute(
+		DEPTH_WIDTH * DEPTH_HEIGHT,
+	);
+	let updateHorizontalBlurShader = horizontalBlurShader().compute(
 		DEPTH_WIDTH * DEPTH_HEIGHT,
 	);
 
@@ -241,17 +254,24 @@ async function main() {
 
 		await renderer.compute(updateProbePositions);
 		await renderer.compute(updateProbeVisibility);
+
+		await renderer.compute(updateHorizontalBlurShader);
+		await renderer.compute(updateVerticalBlurShader);
+
 		await renderer.compute(updateDebugDepthMap);
 		await renderer.compute(updateDebugProbes);
 
 		const bufferArray = await renderer.getArrayBufferAsync(probePositions);
 		const outputData = new Float32Array(bufferArray);
-		for (let i = 0; i < PROBE_COUNT; i++) {
-			addProbe(
-				outputData[i * 4 + 0],
-				outputData[i * 4 + 1],
-				outputData[i * 4 + 2],
-			);
+
+		for (let i = 0; i < PROBE_COUNT - 1; i++) {
+			if (outputData[i * 4 + 1] !== 0) {
+				addProbe(
+					outputData[i * 4 + 0],
+					outputData[i * 4 + 1],
+					outputData[i * 4 + 2],
+				);
+			}
 		}
 
 		await updateProbes(scene, renderer);
@@ -368,8 +388,8 @@ async function main() {
 		directLight: true,
 		probeHelpers: true,
 		irradianceLight: false,
-		probeGridSize: 8,
-		probeLayerCount: 1,
+		probeGridSize: 7,
+		probeLayerCount: 2,
 		probeLightIntensity: 1.0,
 		directLightIntensity: 1.0,
 		irradianceLightIntensity: 0.5,
@@ -568,6 +588,11 @@ async function main() {
 		.on("change", async (ev) => {
 			if (!ev.last) return;
 
+			// if (renderer.backend && renderer.backend.device) {
+			// 	console.log("CALLED: THIS");
+			// 	await renderer.backend.device.queue.onSubmittedWorkDone();
+			// }
+
 			updateDebugProbes.dispose();
 
 			updateGridSize(ev.value);
@@ -591,6 +616,11 @@ async function main() {
 		})
 		.on("change", async (ev) => {
 			if (!ev.last) return;
+
+			// if (renderer.backend && renderer.backend.device) {
+			// 	console.log("CALLED: THIS");
+			// 	await renderer.backend.device.queue.onSubmittedWorkDone();
+			// }
 
 			updateDebugProbes.dispose();
 			updateProbePositions.dispose();
@@ -664,10 +694,13 @@ async function main() {
 		.on("change", async (ev) => {
 			if (!ev.last) return;
 
-			updateProbePositions.dispose();
+			// if (renderer.backend && renderer.backend.device) {
+			// 	console.log("CALLED: THIS");
+			// 	await renderer.backend.device.queue.onSubmittedWorkDone();
+			// }
 
 			updateProbeGridType(ev.value);
-
+			updateProbePositions.dispose();
 			if (ev.value === "street") {
 				updateProbePositions = computeStreetGridProbePositions().compute(
 					DEPTH_WIDTH * DEPTH_HEIGHT * LAYER_COUNT,
