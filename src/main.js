@@ -21,10 +21,13 @@ import {
 	GRID_HEIGHT,
 	GRID_WIDTH,
 	HEIGHT,
+	LAYER_COUNT,
 	PROBE_COUNT,
+	PROBE_GRID_TYPE,
 	probePositions,
 	updateGridSize,
-	updateProbeCount,
+	updateLayerCount,
+	updateProbeGridType,
 	WIDTH,
 } from "./constants";
 import {
@@ -162,7 +165,7 @@ async function main() {
 		computeIrradianceCubemapFromLightBuffer().compute(12 * WIDTH * HEIGHT);
 
 	let updateProbePositions = computeStreetGridProbePositions().compute(
-		DEPTH_WIDTH * DEPTH_HEIGHT,
+		DEPTH_WIDTH * DEPTH_HEIGHT * LAYER_COUNT,
 	);
 	let updateDebugDepthMap = debugDepthMap().compute(DEPTH_WIDTH * DEPTH_HEIGHT);
 	let updateDebugProbes = debugProbes().compute(PROBE_COUNT);
@@ -209,7 +212,7 @@ async function main() {
 		loadCar(() => {
 			addCar(scene);
 		});
-		//updateMaterials();
+		updateMaterials();
 		ground.setMaterialOutputNode(computeGlobalLight);
 	});
 
@@ -265,27 +268,6 @@ async function main() {
 		renderer.render(scene, testCamera);
 		renderer.setRenderTarget(null);
 	}
-
-	// POINT LIGHTS
-	// const lightPositions = [
-	// 	[3, 0.5, -2],
-	// 	[2, 0.5, 2],
-	// 	[8, 0.5, 0],
-	// 	[3, 0.5, 9],
-	// 	[-1, 0.5, 7],
-	// ];
-	// for (let i = 0; i < lightPositions.length; i++) {
-	// 	const pos = lightPositions[i];
-
-	// 	const pointLight = new THREE.PointLight(0xffffff, 20, 10, 2);
-	//     pointLight.position.set(pos[0], pos[1], pos[2]);
-	//     pointLight.castShadow = true;
-	// 	scene.add(pointLight);
-
-	// 	const sphereSize = 0.1;
-	// 	const pointLightHelper = new THREE.PointLightHelper(pointLight, sphereSize);
-	// 	scene.add(pointLightHelper);
-	// }
 
 	// DEBUG SECTION
 
@@ -358,21 +340,6 @@ async function main() {
 		icosahedromMaterialLuminance.colorNode = getLuminanceColor();
 		icosahedromMaterialIrradiance.colorNode = getIrradianceColor();
 
-		// renderer
-		// 	.resolveTimestampsAsync(THREE.TimestampQuery.RENDER)
-		// 	.then((result) => {
-		// 		if (times.length < 100) {
-		// 			times.push(result);
-		// 		} else {
-		// 			let avg = 0;
-		// 			times.forEach((t) => {
-		// 				avg += t;
-		// 			});
-		// 			times = [];
-		// 			//console.log(`GPU Render Time: ${avg / 100} ns`);
-		// 		}
-		// 	});
-
 		renderer.render(scene, camera);
 	}
 	// END OF DEBUG SECTION
@@ -402,6 +369,7 @@ async function main() {
 		probeHelpers: true,
 		irradianceLight: false,
 		probeGridSize: 8,
+		probeLayerCount: 1,
 		probeLightIntensity: 1.0,
 		directLightIntensity: 1.0,
 		irradianceLightIntensity: 0.5,
@@ -593,7 +561,7 @@ async function main() {
 	pane
 		.addBinding(PARAMS, "probeGridSize", {
 			label: "probe grid size",
-			min: 0,
+			min: 1,
 			max: 20,
 			step: 1,
 		})
@@ -601,18 +569,47 @@ async function main() {
 			if (!ev.last) return;
 
 			updateDebugProbes.dispose();
-			gridWidthUniform.value = ev.value;
-			gridHeightUniform.value = ev.value;
 
 			updateGridSize(ev.value);
-			if (PROBE_COUNT === GRID_WIDTH * GRID_HEIGHT) {
-				updateProbeCount(ev.value * ev.value);
-				updateDebugProbes = debugProbes().compute(ev.value * ev.value);
-				probeCountUniform.value = ev.value * ev.value;
+			gridWidthUniform.value = ev.value;
+			gridHeightUniform.value = ev.value;
+			probeCountUniform.value = ev.value * ev.value * LAYER_COUNT;
+
+			updateDebugProbes = debugProbes().compute(
+				ev.value * ev.value * LAYER_COUNT,
+			);
+
+			await updateComputeProbes();
+		});
+
+	pane
+		.addBinding(PARAMS, "probeLayerCount", {
+			label: "probe layer count",
+			min: 1,
+			max: 5,
+			step: 1,
+		})
+		.on("change", async (ev) => {
+			if (!ev.last) return;
+
+			updateDebugProbes.dispose();
+			updateProbePositions.dispose();
+
+			updateLayerCount(ev.value);
+			probeCountUniform.value = GRID_WIDTH * GRID_HEIGHT * ev.value;
+
+			updateDebugProbes = debugProbes().compute(
+				GRID_WIDTH * GRID_HEIGHT * ev.value,
+			);
+
+			if (PROBE_GRID_TYPE === "street") {
+				updateProbePositions = computeStreetGridProbePositions().compute(
+					DEPTH_WIDTH * DEPTH_HEIGHT * ev.value,
+				);
 			} else {
-				updateProbeCount(ev.value * ev.value * 2);
-				updateDebugProbes = debugProbes().compute(ev.value * ev.value * 2);
-				probeCountUniform.value = ev.value * ev.value * 2;
+				updateProbePositions = computeRegularGridProbePositions().compute(
+					GRID_WIDTH * GRID_HEIGHT * ev.value,
+				);
 			}
 
 			await updateComputeProbes();
@@ -667,23 +664,18 @@ async function main() {
 		.on("change", async (ev) => {
 			if (!ev.last) return;
 
-			updateDebugProbes.dispose();
 			updateProbePositions.dispose();
+
+			updateProbeGridType(ev.value);
 
 			if (ev.value === "street") {
 				updateProbePositions = computeStreetGridProbePositions().compute(
-					DEPTH_WIDTH * DEPTH_HEIGHT,
+					DEPTH_WIDTH * DEPTH_HEIGHT * LAYER_COUNT,
 				);
-				updateProbeCount(GRID_HEIGHT * GRID_WIDTH);
-				updateDebugProbes = debugProbes().compute(GRID_HEIGHT * GRID_WIDTH);
-				probeCountUniform.value = GRID_HEIGHT * GRID_WIDTH;
 			} else {
 				updateProbePositions = computeRegularGridProbePositions().compute(
-					DEPTH_WIDTH * DEPTH_HEIGHT * 2,
+					GRID_WIDTH * GRID_HEIGHT * LAYER_COUNT,
 				);
-				updateProbeCount(GRID_HEIGHT * GRID_WIDTH * 2);
-				updateDebugProbes = debugProbes().compute(GRID_HEIGHT * GRID_WIDTH * 2);
-				probeCountUniform.value = GRID_HEIGHT * GRID_WIDTH * 2;
 			}
 
 			await updateComputeProbes();

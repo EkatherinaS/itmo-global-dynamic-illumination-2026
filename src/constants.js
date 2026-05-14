@@ -3,29 +3,35 @@ import * as THREE from "three/webgpu";
 
 export const WIDTH = 32;
 export const HEIGHT = 32;
-export const DEPTH_WIDTH = 512;
-export const DEPTH_HEIGHT = 512;
+export const DEPTH_WIDTH = 256;
+export const DEPTH_HEIGHT = 256;
 export const DEPTH_CAMERA_LEFT = -10;
 export const DEPTH_CAMERA_RIGHT = 10;
 export const DEPTH_CAMERA_TOP = -10;
 export const DEPTH_CAMERA_BOTTOM = 10;
 export const SH_COEFFICIENTS_COUNT = 9;
 export const MAX_GRID_SIZE = 20;
+export const MAX_LAYER_SIZE = 5;
 
-export let GRID_WIDTH = 10;
-export let GRID_HEIGHT = 10;
-// CHANGE to switch between probe grids
-// if using regular grid -> 2 * GRID_WIDTH * GRID_HEIGHT (it generates 2 layers)
-// if using street grid -> GRID_WIDTH * GRID_HEIGHT
-export let PROBE_COUNT = GRID_WIDTH * GRID_HEIGHT;
+export let PROBE_GRID_TYPE = "street";
+export let GRID_WIDTH = 3;
+export let GRID_HEIGHT = 3;
+export let LAYER_COUNT = 4;
+export let PROBE_COUNT = GRID_WIDTH * GRID_HEIGHT * LAYER_COUNT;
 
-export function updateGridSize(size) {
-	GRID_WIDTH = size;
-	GRID_HEIGHT = size;
+export function updateGridSize(value) {
+	GRID_WIDTH = value;
+	GRID_HEIGHT = value;
+	PROBE_COUNT = value * value * LAYER_COUNT;
 }
 
-export function updateProbeCount(size) {
-	PROBE_COUNT = size;
+export function updateLayerCount(value) {
+	LAYER_COUNT = value;
+	PROBE_COUNT = GRID_WIDTH * GRID_HEIGHT * value;
+}
+
+export function updateProbeGridType(value) {
+	PROBE_GRID_TYPE = value;
 }
 
 export const luminanceStorageTexture = new THREE.StorageTexture(WIDTH, HEIGHT);
@@ -54,10 +60,10 @@ export const visibleProbes = new THREE.StorageBufferAttribute(array, 4);
 export const visibilityStrength = new THREE.StorageBufferAttribute(array, 4);
 
 export const probePositions = new THREE.StorageBufferAttribute(
-	MAX_GRID_SIZE * MAX_GRID_SIZE,
+	MAX_GRID_SIZE * MAX_GRID_SIZE * MAX_LAYER_SIZE,
 	4,
 );
 export const sphericalHarmonics = new THREE.StorageBufferAttribute(
-	SH_COEFFICIENTS_COUNT * MAX_GRID_SIZE * MAX_GRID_SIZE,
+	SH_COEFFICIENTS_COUNT * MAX_GRID_SIZE * MAX_GRID_SIZE * MAX_LAYER_SIZE,
 	4,
 );
