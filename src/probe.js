@@ -36,7 +36,7 @@ export const addProbe = (x, y, z) => {
 		format: THREE.RGBAFormat,
 		type: THREE.FloatType,
 	});
-	const camera = new THREE.CubeCamera(0.01, 5, target);
+	const camera = new THREE.CubeCamera(0.001, 10, target);
 	camera.position.set(x, y, z);
 	cameras.push(camera);
 };
@@ -66,7 +66,8 @@ export const updateProbes = async (scene, renderer) => {
 		sphericalHarmonics.copyArray(data);
 		sphericalHarmonics.needsUpdate = true;
 
-		const helper = new LightProbeHelper(lightprobe, 0.2);
+		const helper = new LightProbeHelper(lightprobe, 0.1);
+		helper.visible = false;
 		helpers.push(helper);
 		scene.add(helper);
 

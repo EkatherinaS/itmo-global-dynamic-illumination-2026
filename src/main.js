@@ -132,18 +132,18 @@ async function main() {
 	//const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 	//scene.add(ambientLight);
 
-	let sunDirection = new THREE.Vector3(0.1, 0.2, 0.3).normalize();
+	let sunDirection = new THREE.Vector3(-0.1, 0.3, -0.9);
 	let skydomNevg = 0.75;
 
 	const light = new THREE.DirectionalLight(0xffffff, 5);
-	light.position.copy(sunDirection.multiplyScalar(10));
+	light.position.copy(sunDirection.normalize().multiplyScalar(10));
 	light.castShadow = true;
 
 	light.shadow.radius = 1;
 	light.shadow.blurSamples = 4;
-	light.shadow.mapSize.width = 1024;
-	light.shadow.mapSize.height = 1024;
-	light.shadow.bias = -0.002;
+	light.shadow.mapSize.width = 2048;
+	light.shadow.mapSize.height = 2048;
+	light.shadow.bias = -0.005;
 
 	light.shadow.camera.rotation.set(0);
 	light.shadow.camera.left = -15;
@@ -161,11 +161,11 @@ async function main() {
 
 	let updateComputeTexture = computeLuminanceTexture(
 		skydomNevg,
-		sunDirection,
+		sunDirection.normalize(),
 	).compute(WIDTH * HEIGHT);
 	let updateComputeCubemap = computeLuminanceCubemap(
 		skydomNevg,
-		sunDirection,
+		sunDirection.normalize(),
 	).compute(12 * WIDTH * HEIGHT);
 	let updateLightBuffer = computeLightBuffer().compute(12 * WIDTH * HEIGHT);
 	let updateIrradianceCubemap =
@@ -204,11 +204,11 @@ async function main() {
 	await renderer.init();
 
 	const skydomeMesh = new Skydome(
-		sunDirection,
+		sunDirection.normalize(),
 		skydomNevg,
 		64,
 		8,
-		0x29a1ff,
+		0xb5c7de,
 		0x1b1b1b,
 	);
 	skydomeMesh.setCamera(camera);
@@ -217,7 +217,7 @@ async function main() {
 	const ground = new Ground(200, 64, 0x1b1b1b);
 	ground.setScene(scene);
 
-	loadMapDxf(() => {
+	loadMapGlb(() => {
 		addMap(scene);
 		console.log(renderer.info);
 		computeDepthMap();
@@ -380,10 +380,10 @@ async function main() {
 		skydomskycolor: 0x29a1ff,
 		skydomgroundcolor: 0x2c2c2d,
 		skydomWireframe: false,
-		skydomsunX: 0.1,
-		skydomsunY: 0.2,
-		skydomsunZ: 0.3,
-		skydomNevg: 0.3,
+		skydomsunX: 0.0,
+		skydomsunY: 0.9,
+		skydomsunZ: -0.9,
+		skydomNevg: 0.75,
 		probeLight: false,
 		directLight: true,
 		probeHelpers: true,
@@ -453,7 +453,7 @@ async function main() {
 		})
 		.on("change", (ev) => {
 			skydomeMesh.setSkyColor(ev.value);
-			scene.background.dispose();
+			//scene.background.dispose();
 			scene.fog.dispose();
 			scene.background = new THREE.Color(ev.value);
 			scene.fog = new THREE.FogExp2(ev.value, 0.002);
@@ -487,7 +487,7 @@ async function main() {
 		})
 		.on("change", (ev) => {
 			sunDirection.x = ev.value;
-			skydomeMesh.setSunDirection(sunDirection);
+			skydomeMesh.setSunDirection(sunDirection.normalize());
 			light.position.copy(sunDirection.normalize().multiplyScalar(10));
 			updateComputeSkydom();
 			updateProbes(scene, renderer);
@@ -502,7 +502,7 @@ async function main() {
 		})
 		.on("change", (ev) => {
 			sunDirection.y = ev.value;
-			skydomeMesh.setSunDirection(sunDirection);
+			skydomeMesh.setSunDirection(sunDirection.normalize());
 			light.position.copy(sunDirection.normalize().multiplyScalar(10));
 			updateComputeSkydom();
 			updateProbes(scene, renderer);
@@ -517,7 +517,7 @@ async function main() {
 		})
 		.on("change", (ev) => {
 			sunDirection.z = ev.value;
-			skydomeMesh.setSunDirection(sunDirection);
+			skydomeMesh.setSunDirection(sunDirection.normalize());
 			light.position.copy(sunDirection.normalize().multiplyScalar(10));
 			updateComputeSkydom();
 			updateProbes(scene, renderer);

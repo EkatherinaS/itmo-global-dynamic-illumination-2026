@@ -203,7 +203,7 @@ const computeVisibilityForUV = Fn(({ pointUV, probe }) => {
 
 	const probeU = float(probeUV.x);
 	const probeV = float(probeUV.y);
-	const probeL = float(1.2).sub(probe.y);
+	const probeL = float(1).sub(probe.y);
 
 	const pointU = float(pointUV.x);
 	const pointV = float(pointUV.y);
@@ -213,7 +213,7 @@ const computeVisibilityForUV = Fn(({ pointUV, probe }) => {
 	const dy = pointV.sub(probeV);
 	const dl = pointL.sub(probeL);
 
-	const steps = uint(max(abs(dx), abs(dy)).sub(10));
+	const steps = uint(max(abs(dx), abs(dy)).sub(3));
 	const result = float(1.0);
 	const k = float(2.0);
 
@@ -424,11 +424,13 @@ export const computeStreetGridProbePositions = Fn(() => {
 		});
 	});
 
-	If(allClear, () => {
+	const rnd = rand(u.mul(layer.add(1)), v.mul(layer.add(1)));
+
+	If(allClear.and(rnd.greaterThan(0.5)), () => {
 		const probes = storage(probePositions, "vec4", probeCountUniform);
 		const coords = getWorldCoordsFromDepthUV(vec2(u, v));
 		probes.element(probeIndex).x = coords.x;
-		probes.element(probeIndex).y = float(layer).mul(0.5).add(0.2);
+		probes.element(probeIndex).y = float(layer).mul(0.2).add(0.075);
 		probes.element(probeIndex).z = coords.y;
 	});
 });
@@ -458,7 +460,7 @@ export const horizontalBlurShader = Fn(() => {
 	const v = instanceIndex.div(DEPTH_WIDTH);
 
 	const sum = vec4(0);
-	const rad = int(DEPTH_WIDTH).div(64);
+	const rad = int(2);
 	const diameter = rad.mul(2).add(1);
 
 	Loop(diameter, ({ i }) => {
@@ -484,7 +486,7 @@ export const verticalBlurShader = Fn(() => {
 	const v = instanceIndex.div(DEPTH_WIDTH);
 
 	const sum = vec4(0);
-	const rad = int(DEPTH_WIDTH).div(64);
+	const rad = int(2);
 	const diameter = rad.mul(2).add(1);
 
 	Loop(diameter, ({ i }) => {
@@ -570,7 +572,7 @@ export const computeProbeLight = Fn(() => {
 		const dot = float(1.0);
 
 		If(considerAngleUniform, () => {
-			dot.assign(min(float(1.5), max(float(0), direction.dot(normalWorld))));
+			dot.assign(direction.dot(normalWorld));
 		});
 
 		const shCoeff = vec4(

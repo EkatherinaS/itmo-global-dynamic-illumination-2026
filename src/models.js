@@ -9,7 +9,7 @@ let helpers = [];
 
 const CAR_GOL_QUADRO = "public/models/gol_quadrado.glb";
 const CAR_PORSCHE_911 = "public/models/porsche_911.glb";
-const MAP_1KM = "public/models/map_1km.glb";
+const MAP_1KM = "public/models/map_colored.glb";
 const MAP_CONTOURS = "public/models/contours.dxf";
 
 export function loadCar(callback) {
