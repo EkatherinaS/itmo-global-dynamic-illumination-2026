@@ -4,36 +4,29 @@ import {
 	Loop,
 	abs,
 	array,
-	blur,
 	bool,
 	ceil,
 	distance,
 	float,
 	floor,
-	greaterThan,
-	greaterThanEqual,
 	instanceIndex,
 	int,
 	materialColor,
 	max,
 	min,
-	mix,
 	negate,
 	normalWorld,
 	not,
 	output,
-	positionLocal,
 	positionWorld,
 	rand,
 	round,
-	sign,
 	sqrt,
 	storage,
 	textureLoad,
 	textureStore,
 	uint,
 	uniform,
-	uv,
 	uvec2,
 	vec2,
 	vec3,
@@ -51,13 +44,13 @@ import {
 	LAYER_COUNT,
 	PROBE_COUNT,
 	SH_COEFFICIENTS_COUNT,
+	blurTexture,
 	depthTexture,
 	depthTextureTest,
 	probePositions,
+	probeVisibility,
+	probeVisibilityCoeffs,
 	sphericalHarmonics,
-	tempTexture,
-	visibilityStrength,
-	visibleProbes,
 } from "./constants";
 import { getIrradianceColor } from "./irradiance-texture";
 
@@ -149,9 +142,13 @@ export const debugDepthMap = Fn(() => {
 
 	const uv = vec2(left, top);
 
-	const probesVis = storage(visibleProbes, "vec4", DEPTH_HEIGHT * DEPTH_WIDTH);
+	const probesVis = storage(
+		probeVisibility,
+		"vec4",
+		DEPTH_HEIGHT * DEPTH_WIDTH,
+	);
 	const strengthVis = storage(
-		visibilityStrength,
+		probeVisibilityCoeffs,
 		"vec4",
 		DEPTH_HEIGHT * DEPTH_WIDTH,
 	);
@@ -249,7 +246,11 @@ export const computeProbeVisibility = Fn(() => {
 	const probeInds = getNeighbouringProbes(uv);
 
 	const probesAll = storage(probePositions, "vec4", probeCountUniform);
-	const probesVis = storage(visibleProbes, "vec4", DEPTH_HEIGHT * DEPTH_WIDTH);
+	const probesVis = storage(
+		probeVisibility,
+		"vec4",
+		DEPTH_HEIGHT * DEPTH_WIDTH,
+	);
 
 	const results = probeInds;
 	const visibility = array([
@@ -360,7 +361,7 @@ export const computeProbeVisibility = Fn(() => {
 	probesVis.element(instanceIndex).w = results.element(p3);
 
 	textureStore(
-		visibilityStrength,
+		probeVisibilityCoeffs,
 		vec2(u, v),
 		vec4(
 			visibility.element(p0),
@@ -471,14 +472,14 @@ export const horizontalBlurShader = Fn(() => {
 			.and(sampleU.lessThan(DEPTH_WIDTH));
 
 		const sampleCoord = vec2(sampleU, v);
-		const sample = textureLoad(visibilityStrength, sampleCoord);
+		const sample = textureLoad(probeVisibilityCoeffs, sampleCoord);
 		sum.addAssign(sample.mul(inBounds));
 	});
 
 	const samplesCount = float(diameter);
 	const result = sum.div(samplesCount);
 
-	textureStore(tempTexture, vec2(u, v), result).toReadWrite();
+	textureStore(blurTexture, vec2(u, v), result).toReadWrite();
 });
 
 export const verticalBlurShader = Fn(() => {
@@ -497,12 +498,12 @@ export const verticalBlurShader = Fn(() => {
 			.and(sampleV.lessThan(DEPTH_HEIGHT));
 
 		const sampleCoord = vec2(u, sampleV);
-		const sample = textureLoad(tempTexture, sampleCoord);
+		const sample = textureLoad(blurTexture, sampleCoord);
 		sum.addAssign(sample.mul(inBounds));
 	});
 
 	const result = sum.div(float(diameter));
-	textureStore(visibilityStrength, vec2(u, v), result).toReadWrite();
+	textureStore(probeVisibilityCoeffs, vec2(u, v), result).toReadWrite();
 });
 
 export const computeProbeLight = Fn(() => {
@@ -517,7 +518,11 @@ export const computeProbeLight = Fn(() => {
 	const ind = uint(uv.y).mul(DEPTH_WIDTH).add(uv.x);
 
 	const probesAll = storage(probePositions, "vec4", probeCountUniform);
-	const probesVis = storage(visibleProbes, "vec4", DEPTH_HEIGHT * DEPTH_WIDTH);
+	const probesVis = storage(
+		probeVisibility,
+		"vec4",
+		DEPTH_HEIGHT * DEPTH_WIDTH,
+	);
 	const probeInds = array([
 		probesVis.element(ind).x,
 		probesVis.element(ind).y,
@@ -525,7 +530,7 @@ export const computeProbeLight = Fn(() => {
 		probesVis.element(ind).w,
 	]);
 
-	const strengthVis = textureLoad(visibilityStrength, uv);
+	const strengthVis = textureLoad(probeVisibilityCoeffs, uv);
 	const visCoefs = array([
 		strengthVis.x,
 		strengthVis.y,

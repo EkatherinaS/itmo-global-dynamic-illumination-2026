@@ -1,17 +1,14 @@
 import "./style.css";
 
 import {
-	HorizontalBlurShader,
 	OrbitControls,
 	VertexNormalsHelper,
-	VerticalBlurShader,
 } from "three/examples/jsm/Addons.js";
 import { MapControls } from "three/examples/jsm/controls/MapControls.js";
 import { Inspector } from "three/examples/jsm/inspector/Inspector.js";
-import Stats from "stats-js";
 import * as THREE from "three/webgpu";
-import { hashBlur } from "three/addons/tsl/display/hashBlur.js";
 import { Pane } from "tweakpane";
+import { getWebGPUMemoryUsage } from "webgpu-memory";
 import {
 	DEPTH_CAMERA_BOTTOM,
 	DEPTH_CAMERA_LEFT,
@@ -25,14 +22,18 @@ import {
 	GRID_WIDTH,
 	HEIGHT,
 	LAYER_COUNT,
+	NEVG,
 	PROBE_COUNT,
 	PROBE_GRID_TYPE,
 	probePositions,
-	tempTexture,
+	SUN_DIR,
 	updateGridSize,
 	updateLayerCount,
+	updateNevg,
 	updateProbeGridType,
-	visibilityStrength,
+	updateSunDirectionX,
+	updateSunDirectionY,
+	updateSunDirectionZ,
 	WIDTH,
 } from "./constants";
 import {
@@ -53,7 +54,6 @@ import {
 	probeCountUniform,
 	probeLightIntensityUniform,
 	probeLightUniform,
-	useStreetGridUniform,
 	verticalBlurShader,
 } from "./global-light.js";
 import { Ground } from "./ground.js";
@@ -74,7 +74,6 @@ import {
 	addMap,
 	loadCar,
 	loadMapDxf,
-	loadMapGlb,
 	moveCar,
 	showMapNormals,
 	updateMaterials,
@@ -87,9 +86,10 @@ import {
 	updateProbes,
 } from "./probe.js";
 import { Skydome } from "./skydome.js";
-import { getWebGPUMemoryUsage } from "webgpu-memory";
 
 async function main() {
+	// WEBGPU SETTINGS
+
 	const adapter = await navigator.gpu.requestAdapter();
 	if (adapter) console.log(adapter.limits);
 
@@ -97,7 +97,7 @@ async function main() {
 
 	const renderer = new THREE.WebGPURenderer({
 		canvas,
-		//trackTimestamp: true,
+		trackTimestamp: true,
 	});
 	renderer.setPixelRatio(window.devicePixelRatio);
 	renderer.setSize(window.innerWidth, window.innerHeight);
@@ -110,8 +110,7 @@ async function main() {
 	renderer.inspector = new Inspector();
 	document.body.appendChild(renderer.inspector.domElement);
 
-	const stats = new Stats();
-	document.body.appendChild(stats.dom);
+	// SCENE SETTINGS
 
 	const scene = new THREE.Scene();
 
@@ -124,48 +123,23 @@ async function main() {
 	camera.near = 0.01;
 	camera.far = 256;
 	camera.position.set(0, 10, 0);
+
 	let controls = new OrbitControls(camera, renderer.domElement);
 	controls.enableDamping = true;
 	controls.dampingFactor = 0.25;
 	controls.target.set(0, 0, 0);
 
-	//const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-	//scene.add(ambientLight);
+	// COMPUTE SECTION
 
-	let sunDirection = new THREE.Vector3(-0.1, 0.3, -0.9);
-	let skydomNevg = 0.75;
-
-	const light = new THREE.DirectionalLight(0xffffff, 5);
-	light.position.copy(sunDirection.normalize().multiplyScalar(10));
-	light.castShadow = true;
-
-	light.shadow.radius = 1;
-	light.shadow.blurSamples = 4;
-	light.shadow.mapSize.width = 2048;
-	light.shadow.mapSize.height = 2048;
-	light.shadow.bias = -0.005;
-
-	light.shadow.camera.rotation.set(0);
-	light.shadow.camera.left = -15;
-	light.shadow.camera.right = 15;
-	light.shadow.camera.top = 15;
-	light.shadow.camera.bottom = -15;
-	light.shadow.camera.near = 1;
-	light.shadow.camera.far = 30;
-
-	// const helperShadowCamera = new THREE.CameraHelper(light.shadow.camera);
-	// helperShadowCamera.visible = true;
-	// scene.add(helperShadowCamera);
-
-	scene.add(light);
+	const normalSunDir = SUN_DIR.clone().normalize();
 
 	let updateComputeTexture = computeLuminanceTexture(
-		skydomNevg,
-		sunDirection.normalize(),
+		NEVG,
+		normalSunDir,
 	).compute(WIDTH * HEIGHT);
 	let updateComputeCubemap = computeLuminanceCubemap(
-		skydomNevg,
-		sunDirection.normalize(),
+		NEVG,
+		normalSunDir,
 	).compute(12 * WIDTH * HEIGHT);
 	let updateLightBuffer = computeLightBuffer().compute(12 * WIDTH * HEIGHT);
 	let updateIrradianceCubemap =
@@ -186,7 +160,33 @@ async function main() {
 		DEPTH_WIDTH * DEPTH_HEIGHT,
 	);
 
-	// debug camera & plane for depth map
+	// LIGHT SETTINGS
+
+	const light = new THREE.DirectionalLight(0xffffff, 5);
+	light.position.copy(normalSunDir.multiplyScalar(10));
+	light.castShadow = true;
+
+	light.shadow.radius = 1;
+	light.shadow.blurSamples = 4;
+	light.shadow.mapSize.width = 1024;
+	light.shadow.mapSize.height = 1024;
+	light.shadow.bias = -0.005;
+
+	light.shadow.camera.rotation.set(0);
+	light.shadow.camera.left = -15;
+	light.shadow.camera.right = 15;
+	light.shadow.camera.top = 15;
+	light.shadow.camera.bottom = -15;
+	light.shadow.camera.near = 1;
+	light.shadow.camera.far = 30;
+	scene.add(light);
+
+	// const helperShadowCamera = new THREE.CameraHelper(light.shadow.camera);
+	// helperShadowCamera.visible = true;
+	// scene.add(helperShadowCamera);
+
+	// DEPTH MAP RENDER
+
 	const renderTarget = new THREE.RenderTarget(DEPTH_WIDTH, DEPTH_HEIGHT);
 	renderTarget.depthTexture = depthTexture;
 	const testCamera = new THREE.OrthographicCamera(
@@ -203,9 +203,11 @@ async function main() {
 
 	await renderer.init();
 
+	// SKYDOME
+
 	const skydomeMesh = new Skydome(
-		sunDirection.normalize(),
-		skydomNevg,
+		normalSunDir,
+		NEVG,
 		64,
 		8,
 		0xb5c7de,
@@ -217,31 +219,26 @@ async function main() {
 	const ground = new Ground(200, 64, 0x1b1b1b);
 	ground.setScene(scene);
 
-	loadMapGlb(() => {
+	const skyHelper = new VertexNormalsHelper(skydomeMesh.mesh, 1, 0xff0000);
+	skyHelper.visible = false;
+	scene.add(skyHelper);
+
+	// MODELS
+
+	loadMapDxf(() => {
 		addMap(scene);
-		console.log(renderer.info);
+		//console.log(renderer.info);
 		computeDepthMap();
 		updateComputeProbes();
 		loadCar(() => {
 			addCar(scene);
 		});
-		updateMaterials();
+		//updateMaterials();
 		ground.setMaterialOutputNode(computeGlobalLight);
 	});
 
-	const skyHelper = new VertexNormalsHelper(skydomeMesh.mesh, 1, 0xff0000);
-	skyHelper.visible = false;
-	scene.add(skyHelper);
+	// COMPUTE SHADER
 
-	async function animateAsync() {
-		stats.begin();
-		moveCar();
-		controls.update();
-		render();
-		stats.end();
-	}
-
-	// compute shader
 	function updateComputeSkydom() {
 		renderer.compute(updateComputeTexture);
 		renderer.compute(updateComputeCubemap);
@@ -291,7 +288,6 @@ async function main() {
 
 	// DEBUG SECTION
 
-	// debug icosahedron for Luminance
 	const icosahedromMaterialLuminance = new THREE.MeshBasicNodeMaterial({
 		color: 0x00ff00,
 	});
@@ -303,7 +299,6 @@ async function main() {
 	icosahedronLuminance.position.set(1.5, 3, 0);
 	//scene.add(icosahedronLuminance);
 
-	// debug icosahedron for Irradiance
 	const icosahedromMaterialIrradiance = new THREE.MeshBasicNodeMaterial({
 		color: 0x00ff00,
 	});
@@ -315,7 +310,6 @@ async function main() {
 	icosahedronIrradiance.position.set(-1.5, 3, 0);
 	//scene.add(icosahedronIrradiance);
 
-	// debug plane for Luminance
 	const materialLuminance = new THREE.MeshBasicNodeMaterial({
 		color: 0x00ff00,
 	});
@@ -323,7 +317,6 @@ async function main() {
 	const meshLuminance = new THREE.Mesh(geometryLuminance, materialLuminance);
 	camera.add(meshLuminance);
 
-	// debug plane for Irradiance
 	const materialIrradiance = new THREE.MeshBasicNodeMaterial({
 		color: 0x00ff00,
 	});
@@ -331,14 +324,14 @@ async function main() {
 	const meshIrradiance = new THREE.Mesh(geometryIrradiance, materialIrradiance);
 	camera.add(meshIrradiance);
 
-	// debug camera & plane for depth map
 	const material = new THREE.MeshBasicMaterial({
 		map: depthTextureTest,
 	});
 	const plane = new THREE.Mesh(new THREE.PlaneGeometry(0.004, 0.004), material);
 	camera.add(plane);
 
-	//let times = [];
+	// RENDER
+
 	function render() {
 		const width = window.innerWidth;
 		const height = window.innerHeight;
@@ -362,7 +355,12 @@ async function main() {
 
 		renderer.render(scene, camera);
 	}
-	// END OF DEBUG SECTION
+
+	async function animateAsync() {
+		moveCar();
+		controls.update();
+		render();
+	}
 
 	scene.add(camera);
 	updateComputeSkydom();
@@ -380,10 +378,10 @@ async function main() {
 		skydomskycolor: 0x29a1ff,
 		skydomgroundcolor: 0x2c2c2d,
 		skydomWireframe: false,
-		skydomsunX: 0.0,
-		skydomsunY: 0.9,
-		skydomsunZ: -0.9,
-		skydomNevg: 0.75,
+		skydomsunX: 0.1,
+		skydomsunY: 0.2,
+		skydomsunZ: 0.3,
+		NEVG: 0.75,
 		probeLight: false,
 		directLight: true,
 		probeHelpers: true,
@@ -406,19 +404,11 @@ async function main() {
 	});
 
 	pane
-		.addBinding(PARAMS, "isbackground", {
-			label: "background",
-		})
-		.on("change", (ev) => {
-			skydomeMesh.setBackground(ev.value);
-		});
-
-	pane
 		.addBinding(PARAMS, "mapnormals", {
 			label: "map normals",
 		})
 		.on("change", (ev) => {
-			showMapNormals();
+			showMapNormals(ev.value);
 		});
 
 	pane
@@ -453,21 +443,7 @@ async function main() {
 		})
 		.on("change", (ev) => {
 			skydomeMesh.setSkyColor(ev.value);
-			//scene.background.dispose();
-			scene.fog.dispose();
-			scene.background = new THREE.Color(ev.value);
-			scene.fog = new THREE.FogExp2(ev.value, 0.002);
 			updateProbes(scene, renderer);
-		});
-
-	pane
-		.addBinding(PARAMS, "skydomgroundcolor", {
-			label: "ground color",
-			view: "color",
-		})
-		.on("change", (ev) => {
-			skydomeMesh.setGroundColor(ev.value);
-			ground.setGroundColor(ev.value);
 		});
 
 	pane
@@ -486,10 +462,21 @@ async function main() {
 			step: 0.01,
 		})
 		.on("change", (ev) => {
-			sunDirection.x = ev.value;
-			skydomeMesh.setSunDirection(sunDirection.normalize());
-			light.position.copy(sunDirection.normalize().multiplyScalar(10));
+			updateSunDirectionX(ev.value);
+			const normSunDir = SUN_DIR.clone().normalize();
+			skydomeMesh.setSunDirection(normSunDir);
+
+			updateComputeTexture.dispose();
+			updateComputeTexture = computeLuminanceTexture(NEVG, normSunDir).compute(
+				WIDTH * HEIGHT,
+			);
+			updateComputeCubemap.dispose();
+			updateComputeCubemap = computeLuminanceCubemap(NEVG, normSunDir).compute(
+				12 * WIDTH * HEIGHT,
+			);
 			updateComputeSkydom();
+
+			light.position.copy(normSunDir.multiplyScalar(10));
 			updateProbes(scene, renderer);
 		});
 
@@ -501,10 +488,21 @@ async function main() {
 			step: 0.01,
 		})
 		.on("change", (ev) => {
-			sunDirection.y = ev.value;
-			skydomeMesh.setSunDirection(sunDirection.normalize());
-			light.position.copy(sunDirection.normalize().multiplyScalar(10));
+			updateSunDirectionY(ev.value);
+			const normSunDir = SUN_DIR.clone().normalize();
+			skydomeMesh.setSunDirection(normSunDir);
+
+			updateComputeTexture.dispose();
+			updateComputeTexture = computeLuminanceTexture(NEVG, normSunDir).compute(
+				WIDTH * HEIGHT,
+			);
+			updateComputeCubemap.dispose();
+			updateComputeCubemap = computeLuminanceCubemap(NEVG, normSunDir).compute(
+				12 * WIDTH * HEIGHT,
+			);
 			updateComputeSkydom();
+
+			light.position.copy(normSunDir.multiplyScalar(10));
 			updateProbes(scene, renderer);
 		});
 
@@ -516,23 +514,45 @@ async function main() {
 			step: 0.01,
 		})
 		.on("change", (ev) => {
-			sunDirection.z = ev.value;
-			skydomeMesh.setSunDirection(sunDirection.normalize());
-			light.position.copy(sunDirection.normalize().multiplyScalar(10));
+			updateSunDirectionZ(ev.value);
+			const normSunDir = SUN_DIR.clone().normalize();
+			skydomeMesh.setSunDirection(normSunDir);
+
+			updateComputeTexture.dispose();
+			updateComputeTexture = computeLuminanceTexture(NEVG, normSunDir).compute(
+				WIDTH * HEIGHT,
+			);
+			updateComputeCubemap.dispose();
+			updateComputeCubemap = computeLuminanceCubemap(NEVG, normSunDir).compute(
+				12 * WIDTH * HEIGHT,
+			);
 			updateComputeSkydom();
+
+			light.position.copy(normSunDir.multiplyScalar(10));
 			updateProbes(scene, renderer);
 		});
 
 	pane
-		.addBinding(PARAMS, "skydomNevg", {
+		.addBinding(PARAMS, "NEVG", {
 			label: "Nevg",
 			min: 0.2,
 			max: 1,
 			step: 0.01,
 		})
 		.on("change", (ev) => {
-			skydomNevg = ev.value;
-			skydomeMesh.setNevg(skydomNevg);
+			updateNevg(ev.value);
+			skydomeMesh.setNevg(NEVG);
+
+			updateComputeTexture.dispose();
+			updateComputeTexture = computeLuminanceTexture(NEVG, SUN_DIR).compute(
+				WIDTH * HEIGHT,
+			);
+
+			updateComputeCubemap.dispose();
+			updateComputeCubemap = computeLuminanceCubemap(NEVG, SUN_DIR).compute(
+				12 * WIDTH * HEIGHT,
+			);
+
 			updateComputeSkydom();
 			updateProbes(scene, renderer);
 		});
@@ -588,11 +608,6 @@ async function main() {
 		.on("change", async (ev) => {
 			if (!ev.last) return;
 
-			// if (renderer.backend && renderer.backend.device) {
-			// 	console.log("CALLED: THIS");
-			// 	await renderer.backend.device.queue.onSubmittedWorkDone();
-			// }
-
 			updateDebugProbes.dispose();
 
 			updateGridSize(ev.value);
@@ -616,11 +631,6 @@ async function main() {
 		})
 		.on("change", async (ev) => {
 			if (!ev.last) return;
-
-			// if (renderer.backend && renderer.backend.device) {
-			// 	console.log("CALLED: THIS");
-			// 	await renderer.backend.device.queue.onSubmittedWorkDone();
-			// }
 
 			updateDebugProbes.dispose();
 			updateProbePositions.dispose();
@@ -694,11 +704,6 @@ async function main() {
 		.on("change", async (ev) => {
 			if (!ev.last) return;
 
-			// if (renderer.backend && renderer.backend.device) {
-			// 	console.log("CALLED: THIS");
-			// 	await renderer.backend.device.queue.onSubmittedWorkDone();
-			// }
-
 			updateProbeGridType(ev.value);
 			updateProbePositions.dispose();
 			if (ev.value === "street") {
@@ -715,6 +720,24 @@ async function main() {
 		});
 
 	/*
+
+
+	pane
+		.addBinding(PARAMS, "skydomgroundcolor", {
+			label: "ground color",
+			view: "color",
+		})
+		.on("change", (ev) => {
+			skydomeMesh.setGroundColor(ev.value);
+			ground.setGroundColor(ev.value);
+		});
+	pane
+		.addBinding(PARAMS, "isbackground", {
+			label: "background",
+		})
+		.on("change", (ev) => {
+			skydomeMesh.setBackground(ev.value);
+		});
     pane
         .addBinding(PARAMS, "shadowcamera", {
             label: "shadow camera",

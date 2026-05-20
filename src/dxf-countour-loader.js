@@ -1,10 +1,5 @@
-import * as THREE from "three/webgpu";
 import DxfParser from "dxf-json";
-import { getIrradianceColor } from "./irradiance-texture";
-import { computeGlobalLight } from "./global-light";
-import { Fn } from "three/src/nodes/TSL.js";
-import { float, color } from "three/tsl";
-import { GRID_HEIGHT, GRID_WIDTH, PROBE_COUNT } from "./constants";
+import * as THREE from "three/webgpu";
 
 class BoundingBox {
 	constructor(x, y) {
@@ -108,7 +103,7 @@ class Polyline {
 			depth: 50 + Math.random() * 30,
 			bevelEnabled: true,
 			bevelThickness: 1.2,
-			bevelSegments: 16,
+			bevelSegments: 4,
 		};
 		return new THREE.ExtrudeGeometry(shape, extrudeSettings);
 	}
@@ -186,13 +181,6 @@ class Model {
 			mesh.receiveShadow = true;
 			group.add(mesh);
 		});
-		group.position.set(0, 0, 0);
-		group.scale.set(0.01, 0.01, 0.01);
-		group.rotateX(-Math.PI / 2);
-		new THREE.Box3()
-			.setFromObject(group)
-			.getCenter(group.position)
-			.multiply(new THREE.Vector3(-1, 0, -1));
 		return group;
 	}
 }

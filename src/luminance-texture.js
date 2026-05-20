@@ -1,32 +1,32 @@
-import { getSkyLuminance } from "./luminance-equation";
 import {
-	vec3,
-	instanceIndex,
 	Fn,
-	color,
-	uint,
 	Loop,
-	float,
-	texture,
-	textureStore,
 	PI,
-	uvec2,
+	color,
 	cos,
+	float,
+	instanceIndex,
 	sin,
 	sqrt,
+	texture,
 	textureLoad,
+	textureStore,
+	uint,
+	uvec2,
+	vec3,
 } from "three/tsl";
+import {
+	HEIGHT,
+	WIDTH,
+	luminanceStorageCubemap,
+	luminanceStorageTexture,
+} from "./constants";
 import {
 	getCoordinatesOnFace,
 	getUVForLocalNormal,
 	getUVOnFace,
 } from "./cubemap-helper";
-import {
-	HEIGHT,
-	WIDTH,
-	luminanceStorageTexture,
-	luminanceStorageCubemap,
-} from "./constants";
+import { getSkyLuminance } from "./luminance-equation";
 
 // EQUIRECTANGULAR PROJECTION
 // https://www.researchgate.net/publication/328011848_Scalable_Omnidirectional_Video_Coding_for_Real-Time_Virtual_Reality_Applications

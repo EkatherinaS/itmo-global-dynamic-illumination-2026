@@ -1,11 +1,4 @@
-import {
-	instanceIndex,
-	textureLoad,
-	textureStore,
-	uvec2,
-	Fn,
-	float,
-} from "three/tsl";
+import { Fn, instanceIndex, textureLoad, textureStore, uvec2 } from "three/tsl";
 import { depthTexture, depthTextureTest, WIDTH } from "./constants";
 
 export const computeDepthTextureTest = Fn(() => {

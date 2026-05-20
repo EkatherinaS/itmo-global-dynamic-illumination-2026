@@ -1,9 +1,8 @@
+import { LightProbeHelper } from "three/examples/jsm/helpers/LightProbeHelperGPU.js";
 import * as THREE from "three/webgpu";
 import { LightProbeGenerator } from "../node_modules/three/examples/jsm/lights/LightProbeGenerator.js";
-import { LightProbeHelper } from "three/examples/jsm/helpers/LightProbeHelperGPU.js";
 import {
 	PROBE_COUNT,
-	probePositions,
 	SH_COEFFICIENTS_COUNT,
 	sphericalHarmonics,
 } from "./constants.js";
@@ -32,11 +31,11 @@ export const clearProbes = (scene) => {
 };
 
 export const addProbe = (x, y, z) => {
-	const target = new THREE.CubeRenderTarget(64, {
+	const target = new THREE.CubeRenderTarget(8, {
 		format: THREE.RGBAFormat,
 		type: THREE.FloatType,
 	});
-	const camera = new THREE.CubeCamera(0.001, 10, target);
+	const camera = new THREE.CubeCamera(0.001, 5, target);
 	camera.position.set(x, y, z);
 	cameras.push(camera);
 };

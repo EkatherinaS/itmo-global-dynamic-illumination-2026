@@ -1,7 +1,7 @@
 import { GLTFLoader, VertexNormalsHelper } from "three/examples/jsm/Addons.js";
 import * as THREE from "three/webgpu";
-import { computeGlobalLight } from "./global-light";
 import { DXFLoader } from "./dxf-countour-loader.js";
+import { computeGlobalLight } from "./global-light";
 
 const loader = new GLTFLoader();
 let carModel, mapModel;
@@ -55,13 +55,20 @@ export function loadMapDxf(callback) {
 	const dxfloader = new DXFLoader();
 	dxfloader.load(MAP_CONTOURS, function (model) {
 		mapModel = model.model;
-		mapModel.children.forEach((mesh) => {
-			helpers.push(new VertexNormalsHelper(mesh, 10, 0xff0000, 10));
-		});
+		mapModel.position.set(0, 0, 0);
+		mapModel.scale.set(0.01, 0.01, 0.01);
+		mapModel.rotateX(-Math.PI / 2);
+		mapModel.children.forEach((mesh) =>
+			helpers.push(new VertexNormalsHelper(mesh, 10, 0xff0000, 10)),
+		);
 		helpers.forEach((helper) => {
 			mapModel.add(helper);
 			helper.visible = false;
 		});
+		new THREE.Box3()
+			.setFromObject(mapModel)
+			.getCenter(mapModel.position)
+			.multiply(new THREE.Vector3(-1, 0, -1));
 		callback();
 	});
 }
@@ -99,8 +106,8 @@ export function addMap(scene) {
 	}
 }
 
-export function showMapNormals() {
-	helpers.forEach((helper) => (helper.visible = ev.value));
+export function showMapNormals(value) {
+	helpers.forEach((helper) => (helper.visible = value));
 }
 
 export function updateMaterials(scene) {
