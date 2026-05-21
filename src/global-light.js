@@ -57,7 +57,7 @@ import { getIrradianceColor } from "./irradiance-texture";
 export const probeLightUniform = uniform(false);
 export const directLightUniform = uniform(true);
 export const irradianceLightUniform = uniform(false);
-export const considerAngleUniform = uniform(true);
+export const considerAngleUniform = uniform(false);
 export const useStreetGridUniform = uniform(true);
 
 export const probeLightIntensityUniform = uniform(float(1));
@@ -431,7 +431,10 @@ export const computeStreetGridProbePositions = Fn(() => {
 		const probes = storage(probePositions, "vec4", probeCountUniform);
 		const coords = getWorldCoordsFromDepthUV(vec2(u, v));
 		probes.element(probeIndex).x = coords.x;
-		probes.element(probeIndex).y = float(layer).mul(0.2).add(0.075);
+		probes.element(probeIndex).y = float(1)
+			.div(layerCountUniform)
+			.mul(layer)
+			.add(float(1).div(layerCountUniform).div(2));
 		probes.element(probeIndex).z = coords.y;
 	});
 });

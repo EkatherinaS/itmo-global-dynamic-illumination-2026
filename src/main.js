@@ -72,11 +72,14 @@ import {
 import {
 	addCar,
 	addMap,
+	linkCameraToCar,
 	loadCar,
 	loadMapDxf,
 	moveCar,
 	showMapNormals,
-	updateMaterials,
+	unLinkCameraFromCar,
+	updateMaterialsCar,
+	updateMaterialsMap,
 } from "./models.js";
 import {
 	addProbe,
@@ -101,7 +104,7 @@ async function main() {
 	});
 	renderer.setPixelRatio(window.devicePixelRatio);
 	renderer.setSize(window.innerWidth, window.innerHeight);
-	renderer.setAnimationLoop(animateAsync);
+	renderer.setAnimationLoop(render);
 	renderer.shadowMap.enabled = true;
 	renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 	renderer.toneMapping = THREE.NoToneMapping;
@@ -195,9 +198,11 @@ async function main() {
 		DEPTH_CAMERA_TOP,
 		DEPTH_CAMERA_BOTTOM,
 		1,
-		10,
+		2,
 	);
-	testCamera.position.set(0, 5, 0);
+	const cameraHelper = new THREE.CameraHelper(testCamera);
+	//scene.add(cameraHelper);
+	testCamera.position.set(0, 2, 0);
 	testCamera.lookAt(0, 0, 0);
 	scene.add(testCamera);
 
@@ -227,14 +232,15 @@ async function main() {
 
 	loadMapDxf(() => {
 		addMap(scene);
-		//console.log(renderer.info);
 		computeDepthMap();
 		updateComputeProbes();
-		loadCar(() => {
-			addCar(scene);
-		});
-		//updateMaterials();
+		updateMaterialsMap();
 		ground.setMaterialOutputNode(computeGlobalLight);
+	});
+
+	loadCar(() => {
+		addCar(scene);
+		updateMaterialsCar();
 	});
 
 	// COMPUTE SHADER
@@ -348,18 +354,18 @@ async function main() {
 			camera.updateProjectionMatrix();
 		}
 
+		moveCar();
+		if (!camera.parent.isScene) controls.target.copy(camera.parent.position);
+
+		controls.update();
+
 		materialLuminance.colorNode = getLuminanceCubemap();
 		materialIrradiance.colorNode = getIrradianceTexture();
 		icosahedromMaterialLuminance.colorNode = getLuminanceColor();
 		icosahedromMaterialIrradiance.colorNode = getIrradianceColor();
 
 		renderer.render(scene, camera);
-	}
-
-	async function animateAsync() {
-		moveCar();
-		controls.update();
-		render();
+		renderer.resolveTimestampsAsync(THREE.TimestampQuery.RENDER);
 	}
 
 	scene.add(camera);
@@ -374,6 +380,7 @@ async function main() {
 		isbackground: false,
 		mapnormals: false,
 		controls: "orbit",
+		followCar: false,
 		skydomehalfsphere: false,
 		skydomskycolor: 0x29a1ff,
 		skydomgroundcolor: 0x2c2c2d,
@@ -384,14 +391,14 @@ async function main() {
 		NEVG: 0.75,
 		probeLight: false,
 		directLight: true,
-		probeHelpers: true,
+		probeHelpers: false,
 		irradianceLight: false,
 		probeGridSize: 7,
 		probeLayerCount: 2,
 		probeLightIntensity: 1.0,
 		directLightIntensity: 1.0,
 		irradianceLightIntensity: 0.5,
-		considerAngle: true,
+		considerAngle: false,
 		probeGrid: "street",
 	};
 	const pane = new Pane({
@@ -409,6 +416,23 @@ async function main() {
 		})
 		.on("change", (ev) => {
 			showMapNormals(ev.value);
+		});
+
+	pane
+		.addBinding(PARAMS, "followCar", {
+			label: "follow car",
+		})
+		.on("change", (ev) => {
+			if (ev.value) {
+				controls.saveState();
+				scene.remove(camera);
+				linkCameraToCar(camera);
+			} else {
+				unLinkCameraFromCar(camera);
+				controls.reset();
+				camera.position.set(0, 10, 0);
+				scene.add(camera);
+			}
 		});
 
 	pane

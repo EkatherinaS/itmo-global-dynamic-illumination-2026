@@ -4,12 +4,12 @@ export const WIDTH = 32;
 export const HEIGHT = 32;
 export const DEPTH_WIDTH = 512;
 export const DEPTH_HEIGHT = 512;
-export const DEPTH_CAMERA_LEFT = -10;
-export const DEPTH_CAMERA_RIGHT = 10;
-export const DEPTH_CAMERA_TOP = -10;
-export const DEPTH_CAMERA_BOTTOM = 10;
+export const DEPTH_CAMERA_LEFT = -11;
+export const DEPTH_CAMERA_RIGHT = 11;
+export const DEPTH_CAMERA_TOP = -11;
+export const DEPTH_CAMERA_BOTTOM = 11;
 export const SH_COEFFICIENTS_COUNT = 9;
-export const MAX_PROBE_COUNT = 500;
+export const MAX_PROBE_COUNT = 2000;
 
 export let PROBE_GRID_TYPE = "street";
 export let GRID_WIDTH = 7;
@@ -60,11 +60,7 @@ export const irradianceStorageCubemap = new THREE.StorageTexture(
 	3 * HEIGHT,
 );
 
-export const depthTexture = new THREE.DepthTexture(
-	DEPTH_WIDTH,
-	DEPTH_HEIGHT,
-	THREE.FloatType,
-);
+export const depthTexture = new THREE.DepthTexture(DEPTH_WIDTH, DEPTH_HEIGHT);
 export const depthTextureTest = new THREE.StorageTexture(
 	DEPTH_WIDTH,
 	DEPTH_HEIGHT,

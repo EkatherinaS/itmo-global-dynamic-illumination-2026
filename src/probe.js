@@ -35,7 +35,7 @@ export const addProbe = (x, y, z) => {
 		format: THREE.RGBAFormat,
 		type: THREE.FloatType,
 	});
-	const camera = new THREE.CubeCamera(0.001, 5, target);
+	const camera = new THREE.CubeCamera(0.001, 1, target);
 	camera.position.set(x, y, z);
 	cameras.push(camera);
 };

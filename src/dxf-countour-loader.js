@@ -171,6 +171,7 @@ class Model {
 			const material = new THREE.MeshPhongNodeMaterial({
 				color: randcolor,
 				flatShading: false,
+				side: THREE.DoubleSide,
 			});
 
 			const geometry = polyline.getGeometry();
