@@ -12,9 +12,9 @@ export const SH_COEFFICIENTS_COUNT = 9;
 export const MAX_PROBE_COUNT = 2000;
 
 export let PROBE_GRID_TYPE = "street";
-export let GRID_WIDTH = 7;
-export let GRID_HEIGHT = 7;
-export let LAYER_COUNT = 2;
+export let GRID_WIDTH = 10;
+export let GRID_HEIGHT = 10;
+export let LAYER_COUNT = 3;
 export let PROBE_COUNT = GRID_WIDTH * GRID_HEIGHT * LAYER_COUNT;
 export let SUN_DIR = new THREE.Vector3(0.1, 0.2, 0.3);
 export let NEVG = 0.75;

@@ -7,6 +7,7 @@ import {
 	bool,
 	ceil,
 	distance,
+	dot,
 	float,
 	floor,
 	instanceIndex,
@@ -60,9 +61,13 @@ export const irradianceLightUniform = uniform(false);
 export const considerAngleUniform = uniform(false);
 export const useStreetGridUniform = uniform(true);
 
-export const probeLightIntensityUniform = uniform(float(1));
+export const blurProbeCoeffsUniform = uniform(float(4));
+export const enterShadowAreaUniform = uniform(float(4));
+export const shadowAreaBlurUniform = uniform(float(0));
+
+export const probeLightIntensityUniform = uniform(float(0.25));
 export const directLightIntensityUniform = uniform(float(1));
-export const irradianceLightIntensityUniform = uniform(float(1));
+export const irradianceLightIntensityUniform = uniform(float(0.1));
 
 export const gridWidthUniform = uniform(float(GRID_WIDTH));
 export const gridHeightUniform = uniform(float(GRID_HEIGHT));
@@ -210,9 +215,9 @@ const computeVisibilityForUV = Fn(({ pointUV, probe }) => {
 	const dy = pointV.sub(probeV);
 	const dl = pointL.sub(probeL);
 
-	const steps = uint(max(abs(dx), abs(dy)).sub(3));
+	const steps = uint(max(abs(dx), abs(dy))).sub(enterShadowAreaUniform);
 	const result = float(1.0);
-	const k = float(2.0);
+	const k = float(shadowAreaBlurUniform);
 
 	Loop(steps, ({ i }) => {
 		const t = float(i).div(steps);
@@ -229,10 +234,6 @@ const computeVisibilityForUV = Fn(({ pointUV, probe }) => {
 			const y1 = float(1.0).sub(k.mul(x1.mul(x1)));
 			result.assign(max(0.0, y1));
 		});
-	});
-
-	If(probe.y.equal(0), () => {
-		result.assign(0);
 	});
 
 	return result;
@@ -253,57 +254,20 @@ export const computeProbeVisibility = Fn(() => {
 	);
 
 	const results = probeInds;
-	const visibility = array([
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(0))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(1))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(2))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(3))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(4))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(5))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(6))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(7))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(8))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(9))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(10))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(11))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(12))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(13))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(14))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(15))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(16))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(17))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(18))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(19))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(20))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(21))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(22))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(23))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(24))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(25))),
-		computeVisibilityForUV(uv, probesAll.element(probeInds.element(26))),
-	]);
+	let visibility = array("float", 27).toVar();
 
 	Loop(27, ({ i }) => {
-		const isVisible = visibility.element(i).notEqual(0.0);
-		If(probeInds.element(i).notEqual(-1).and(not(isVisible)), () => {
-			results.element(i).assign(-1);
+		If(probeInds.element(i).notEqual(-1), () => {
+			const res = computeVisibilityForUV(
+				uv,
+				probesAll.element(probeInds.element(i)),
+			);
+			visibility.element(i).assign(res);
+			If(res.equal(0.0), () => {
+				results.element(i).assign(-1);
+			});
 		});
 	});
-
-	// let visibility = array("int", 27).toVar();
-	// Loop(27, ({ i }) => {
-	// 	const probeInd = probeInds.element(i);
-	// 	If(probeInd.notEqual(-1), () => {
-	// 		const res = computeVisibilityForUV(uv, probesAll.element(probeInd));
-	// 		If(res.notEqual(0), () => {
-	// 			visibility.element(i).assign(res);
-	// 		}).Else(() => {
-	// 			visibility.element(i).assign(-1);
-	// 		});
-	// 	}).Else(() => {
-	// 		visibility.element(i).assign(-1);
-	// 	});
-	// });
 
 	const d0 = float(1e10);
 	const d1 = float(1e10);
@@ -414,7 +378,9 @@ export const computeStreetGridProbePositions = Fn(() => {
 
 	const range = rangeWidth.div(4);
 	const allClear = bool(true);
-	const layerDepth = float(layerCountUniform.sub(layer)).div(layerCountUniform);
+	const layerDepth = float(layerCountUniform.sub(layer).sub(1)).div(
+		layerCountUniform,
+	);
 
 	Loop(range, range, ({ i, j }) => {
 		const x = u.add(i).sub(range.div(2));
@@ -426,15 +392,14 @@ export const computeStreetGridProbePositions = Fn(() => {
 	});
 
 	const rnd = rand(u.mul(layer.add(1)), v.mul(layer.add(1)));
+	const layerHeight = float(1).div(layerCountUniform);
+	const curLayerHeight = layerHeight.mul(layer.add(1));
 
 	If(allClear.and(rnd.greaterThan(0.5)), () => {
 		const probes = storage(probePositions, "vec4", probeCountUniform);
 		const coords = getWorldCoordsFromDepthUV(vec2(u, v));
 		probes.element(probeIndex).x = coords.x;
-		probes.element(probeIndex).y = float(1)
-			.div(layerCountUniform)
-			.mul(layer)
-			.add(float(1).div(layerCountUniform).div(2));
+		probes.element(probeIndex).y = curLayerHeight;
 		probes.element(probeIndex).z = coords.y;
 	});
 });
@@ -454,8 +419,11 @@ export const computeRegularGridProbePositions = Fn(() => {
 	const depth = float(textureLoad(depthTexture, gridUV));
 	const coords = getWorldCoordsFromDepthUV(gridUV);
 
+	const layerHeight = float(1).div(layerCountUniform);
+	const curLayerHeight = layerHeight.mul(layer.add(1));
+
 	probes.element(instanceIndex).x = coords.x;
-	probes.element(instanceIndex).y = float(layer).mul(0.5).add(0.2);
+	probes.element(instanceIndex).y = curLayerHeight;
 	probes.element(instanceIndex).z = coords.y;
 });
 
@@ -464,7 +432,7 @@ export const horizontalBlurShader = Fn(() => {
 	const v = instanceIndex.div(DEPTH_WIDTH);
 
 	const sum = vec4(0);
-	const rad = int(2);
+	const rad = int(blurProbeCoeffsUniform);
 	const diameter = rad.mul(2).add(1);
 
 	Loop(diameter, ({ i }) => {
@@ -490,7 +458,7 @@ export const verticalBlurShader = Fn(() => {
 	const v = instanceIndex.div(DEPTH_WIDTH);
 
 	const sum = vec4(0);
-	const rad = int(2);
+	const rad = int(blurProbeCoeffsUniform);
 	const diameter = rad.mul(2).add(1);
 
 	Loop(diameter, ({ i }) => {
@@ -591,9 +559,9 @@ export const computeProbeLight = Fn(() => {
 			result.addAssign(
 				shCoeff
 					.mul(shBasis.element(coefInd))
+					.mul(visCoefs.element(i))
 					.mul(modif)
-					.mul(dot)
-					.mul(visCoefs.element(i)),
+					.mul(dot),
 			);
 		});
 	});

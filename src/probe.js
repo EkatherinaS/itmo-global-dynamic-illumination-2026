@@ -31,7 +31,7 @@ export const clearProbes = (scene) => {
 };
 
 export const addProbe = (x, y, z) => {
-	const target = new THREE.CubeRenderTarget(8, {
+	const target = new THREE.CubeRenderTarget(16, {
 		format: THREE.RGBAFormat,
 		type: THREE.FloatType,
 	});

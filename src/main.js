@@ -37,6 +37,7 @@ import {
 	WIDTH,
 } from "./constants";
 import {
+	blurProbeCoeffsUniform,
 	computeGlobalLight,
 	computeProbeVisibility,
 	computeRegularGridProbePositions,
@@ -46,14 +47,17 @@ import {
 	debugProbes,
 	directLightIntensityUniform,
 	directLightUniform,
+	enterShadowAreaUniform,
 	gridHeightUniform,
 	gridWidthUniform,
 	horizontalBlurShader,
 	irradianceLightIntensityUniform,
 	irradianceLightUniform,
+	layerCountUniform,
 	probeCountUniform,
 	probeLightIntensityUniform,
 	probeLightUniform,
+	shadowAreaBlurUniform,
 	verticalBlurShader,
 } from "./global-light.js";
 import { Ground } from "./ground.js";
@@ -236,11 +240,11 @@ async function main() {
 		updateComputeProbes();
 		updateMaterialsMap();
 		ground.setMaterialOutputNode(computeGlobalLight);
-	});
 
-	loadCar(() => {
-		addCar(scene);
-		updateMaterialsCar();
+		loadCar(() => {
+			addCar(scene);
+			updateMaterialsCar();
+		});
 	});
 
 	// COMPUTE SHADER
@@ -374,6 +378,9 @@ async function main() {
 	// SETTINGS
 
 	const PARAMS = {
+		blurProbeCoeffs: 4,
+		enterShadowArea: 4,
+		shadowAreaBlur: 0,
 		shadows: true,
 		shadowcamera: false,
 		skydomenormals: false,
@@ -393,11 +400,11 @@ async function main() {
 		directLight: true,
 		probeHelpers: false,
 		irradianceLight: false,
-		probeGridSize: 7,
-		probeLayerCount: 2,
-		probeLightIntensity: 1.0,
+		probeGridSize: 10,
+		probeLayerCount: 3,
+		probeLightIntensity: 0.25,
 		directLightIntensity: 1.0,
-		irradianceLightIntensity: 0.5,
+		irradianceLightIntensity: 0.1,
 		considerAngle: false,
 		probeGrid: "street",
 	};
@@ -411,11 +418,36 @@ async function main() {
 	});
 
 	pane
-		.addBinding(PARAMS, "mapnormals", {
-			label: "map normals",
+		.addBinding(PARAMS, "blurProbeCoeffs", {
+			label: "blur radius",
+			min: 0,
+			max: 10,
+			step: 1,
 		})
 		.on("change", (ev) => {
-			showMapNormals(ev.value);
+			blurProbeCoeffsUniform.value = ev.value;
+		});
+
+	pane
+		.addBinding(PARAMS, "enterShadowArea", {
+			label: "steps in shadow",
+			min: 0,
+			max: 10,
+			step: 1,
+		})
+		.on("change", (ev) => {
+			enterShadowAreaUniform.value = ev.value;
+		});
+
+	pane
+		.addBinding(PARAMS, "shadowAreaBlur", {
+			label: "blur in shadow",
+			min: 0,
+			max: 10,
+			step: 1,
+		})
+		.on("change", (ev) => {
+			shadowAreaBlurUniform.value = ev.value;
 		});
 
 	pane
@@ -432,31 +464,6 @@ async function main() {
 				controls.reset();
 				camera.position.set(0, 10, 0);
 				scene.add(camera);
-			}
-		});
-
-	pane
-		.addBinding(PARAMS, "controls", {
-			options: {
-				orbit: "orbit",
-				map: "map",
-			},
-		})
-		.on("change", (ev) => {
-			controls.dispose();
-			if (ev.value === "orbit") {
-				controls = new OrbitControls(camera, controls.domElement);
-				controls.enableDamping = true;
-				controls.dampingFactor = 0.25;
-				controls.target.set(0, 0, 0);
-			}
-			if (ev.value === "map") {
-				camera.position.set(0, 10, 0);
-				controls = new MapControls(camera, controls.domElement);
-				controls.enableDamping = true;
-				controls.dampingFactor = 0.25;
-				controls.target.set(0, 0, 0);
-				controls.maxPolarAngle = Math.PI / 3;
 			}
 		});
 
@@ -660,6 +667,7 @@ async function main() {
 			updateProbePositions.dispose();
 
 			updateLayerCount(ev.value);
+			layerCountUniform.value = ev.value;
 			probeCountUniform.value = GRID_WIDTH * GRID_HEIGHT * ev.value;
 
 			updateDebugProbes = debugProbes().compute(
@@ -710,6 +718,7 @@ async function main() {
 		.on("change", (ev) => {
 			irradianceLightIntensityUniform.value = ev.value;
 		});
+
 	pane
 		.addBinding(PARAMS, "considerAngle", {
 			label: "consider angle",
@@ -745,7 +754,46 @@ async function main() {
 
 	/*
 
+	pane
+		.addBinding(PARAMS, "mapnormals", {
+			label: "map normals",
+		})
+		.on("change", (ev) => {
+			showMapNormals(ev.value);
+		});
 
+	pane
+		.addBinding(PARAMS, "controls", {
+			options: {
+				orbit: "orbit",
+				map: "map",
+			},
+		})
+		.on("change", (ev) => {
+			controls.dispose();
+			if (ev.value === "orbit") {
+				controls = new OrbitControls(camera, controls.domElement);
+				controls.enableDamping = true;
+				controls.dampingFactor = 0.25;
+				controls.target.set(0, 0, 0);
+			}
+			if (ev.value === "map") {
+				camera.position.set(0, 10, 0);
+				controls = new MapControls(camera, controls.domElement);
+				controls.enableDamping = true;
+				controls.dampingFactor = 0.25;
+				controls.target.set(0, 0, 0);
+				controls.maxPolarAngle = Math.PI / 3;
+			}
+		});
+
+	pane
+		.addBinding(PARAMS, "isbackground", {
+			label: "background",
+		})
+		.on("change", (ev) => {
+			skydomeMesh.setBackground(ev.value);
+		});
 	pane
 		.addBinding(PARAMS, "skydomgroundcolor", {
 			label: "ground color",
@@ -754,13 +802,6 @@ async function main() {
 		.on("change", (ev) => {
 			skydomeMesh.setGroundColor(ev.value);
 			ground.setGroundColor(ev.value);
-		});
-	pane
-		.addBinding(PARAMS, "isbackground", {
-			label: "background",
-		})
-		.on("change", (ev) => {
-			skydomeMesh.setBackground(ev.value);
 		});
     pane
         .addBinding(PARAMS, "shadowcamera", {

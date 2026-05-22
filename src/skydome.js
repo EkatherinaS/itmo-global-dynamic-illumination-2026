@@ -184,14 +184,9 @@ export class Skydome {
 
 	setBackground(isBackground) {
 		this.isBackground = isBackground;
-		if (isBackground) {
-			this.scene.backgroundNode = this.ColorNode();
-			if (this.gyro) this.gyro.remove(this.mesh);
-			this.setUpFog();
-		} else {
-			this.scene.backgroundNode = color(this.skyColor);
-			this.setUpFog();
-		}
+		this.scene.backgroundNode = this.ColorNode();
+		if (isBackground && this.gyro) this.gyro.remove(this.mesh);
+		this.setUpFog();
 		this.update();
 	}
 

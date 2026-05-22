@@ -100,7 +100,7 @@ class Polyline {
 
 		const extrudeSettings = {
 			steps: 1,
-			depth: 50 + Math.random() * 30,
+			depth: 40 + Math.random() * 20,
 			bevelEnabled: true,
 			bevelThickness: 1.2,
 			bevelSegments: 4,
