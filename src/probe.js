@@ -31,7 +31,7 @@ export const clearProbes = (scene) => {
 };
 
 export const addProbe = (x, y, z) => {
-	const target = new THREE.CubeRenderTarget(16, {
+	const target = new THREE.CubeRenderTarget(64, {
 		format: THREE.RGBAFormat,
 		type: THREE.FloatType,
 	});
@@ -65,7 +65,7 @@ export const updateProbes = async (scene, renderer) => {
 		sphericalHarmonics.copyArray(data);
 		sphericalHarmonics.needsUpdate = true;
 
-		const helper = new LightProbeHelper(lightprobe, 0.1);
+		const helper = new LightProbeHelper(lightprobe, 0.2);
 		helper.visible = false;
 		helpers.push(helper);
 		scene.add(helper);

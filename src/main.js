@@ -122,7 +122,7 @@ async function main() {
 	const scene = new THREE.Scene();
 
 	const axesHelper = new THREE.AxesHelper(3);
-	scene.add(axesHelper);
+	//scene.add(axesHelper);
 
 	const camera = new THREE.PerspectiveCamera();
 	camera.fov = 60;
@@ -152,7 +152,7 @@ async function main() {
 	let updateIrradianceCubemap =
 		computeIrradianceCubemapFromLightBuffer().compute(12 * WIDTH * HEIGHT);
 
-	let updateProbePositions = computeStreetGridProbePositions().compute(
+	let updateProbePositions = computeRegularGridProbePositions().compute(
 		DEPTH_WIDTH * DEPTH_HEIGHT * LAYER_COUNT,
 	);
 	let updateDebugDepthMap = debugDepthMap().compute(DEPTH_WIDTH * DEPTH_HEIGHT);
@@ -400,13 +400,13 @@ async function main() {
 		directLight: true,
 		probeHelpers: false,
 		irradianceLight: false,
-		probeGridSize: 10,
-		probeLayerCount: 3,
+		probeGridSize: 100,
+		probeLayerCount: 1,
 		probeLightIntensity: 0.25,
 		directLightIntensity: 1.0,
 		irradianceLightIntensity: 0.1,
 		considerAngle: false,
-		probeGrid: "street",
+		probeGrid: "regular",
 	};
 	const pane = new Pane({
 		title: "Settings",
@@ -633,7 +633,7 @@ async function main() {
 		.addBinding(PARAMS, "probeGridSize", {
 			label: "probe grid size",
 			min: 1,
-			max: 20,
+			max: 100,
 			step: 1,
 		})
 		.on("change", async (ev) => {
