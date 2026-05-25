@@ -393,7 +393,7 @@ export const computeStreetGridProbePositions = Fn(() => {
 
 	const rnd = rand(u.mul(layer.add(1)), v.mul(layer.add(1)));
 	const layerHeight = float(1).div(layerCountUniform);
-	const curLayerHeight = layerHeight.mul(layer.add(1));
+	const curLayerHeight = layerHeight.mul(layer).add(layerHeight.div(2));
 
 	If(allClear.and(rnd.greaterThan(0.5)), () => {
 		const probes = storage(probePositions, "vec4", probeCountUniform);
@@ -420,7 +420,7 @@ export const computeRegularGridProbePositions = Fn(() => {
 	const coords = getWorldCoordsFromDepthUV(gridUV);
 
 	const layerHeight = float(1).div(layerCountUniform);
-	const curLayerHeight = layerHeight.mul(layer.add(1));
+	const curLayerHeight = layerHeight.mul(layer).add(layerHeight.div(2));
 
 	probes.element(instanceIndex).x = coords.x;
 	probes.element(instanceIndex).y = curLayerHeight;

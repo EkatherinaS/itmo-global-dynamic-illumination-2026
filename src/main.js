@@ -219,13 +219,13 @@ async function main() {
 		NEVG,
 		64,
 		8,
-		0xb5c7de,
+		0x5c52f4,
 		0x1b1b1b,
 	);
 	skydomeMesh.setCamera(camera);
 	skydomeMesh.setScene(scene);
 
-	const ground = new Ground(200, 64, 0x1b1b1b);
+	const ground = new Ground(100, 64, 0x1b1b1b);
 	ground.setScene(scene);
 
 	const skyHelper = new VertexNormalsHelper(skydomeMesh.mesh, 1, 0xff0000);
@@ -341,6 +341,20 @@ async function main() {
 	camera.add(plane);
 
 	// RENDER
+	let frameStartTime = 0;
+
+	function updateFrameStats() {
+		const frame = renderer.inspector.currentFrame;
+		if (frame.frameId % 30 === 0) {
+			const totalTime30Frames = frame.startTime - frameStartTime;
+			const avgFrameTime = totalTime30Frames / 30;
+			const avgFPS = 1000 / avgFrameTime;
+			frameStartTime = frame.startTime;
+			console.log(
+				`Frame Time: ${avgFrameTime.toFixed(2)} FPS: ${avgFPS.toFixed(2)}`,
+			);
+		}
+	}
 
 	function render() {
 		const width = window.innerWidth;
@@ -400,8 +414,8 @@ async function main() {
 		directLight: true,
 		probeHelpers: false,
 		irradianceLight: false,
-		probeGridSize: 10,
-		probeLayerCount: 3,
+		probeGridSize: 15,
+		probeLayerCount: 2,
 		probeLightIntensity: 0.25,
 		directLightIntensity: 1.0,
 		irradianceLightIntensity: 0.1,
@@ -633,7 +647,7 @@ async function main() {
 		.addBinding(PARAMS, "probeGridSize", {
 			label: "probe grid size",
 			min: 1,
-			max: 20,
+			max: 40,
 			step: 1,
 		})
 		.on("change", async (ev) => {
@@ -657,7 +671,7 @@ async function main() {
 		.addBinding(PARAMS, "probeLayerCount", {
 			label: "probe layer count",
 			min: 1,
-			max: 5,
+			max: 4,
 			step: 1,
 		})
 		.on("change", async (ev) => {
