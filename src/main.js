@@ -51,6 +51,7 @@ import {
 	gridHeightUniform,
 	gridWidthUniform,
 	horizontalBlurShader,
+	interpolatedUniform,
 	irradianceLightIntensityUniform,
 	irradianceLightUniform,
 	layerCountUniform,
@@ -122,7 +123,7 @@ async function main() {
 	const scene = new THREE.Scene();
 
 	const axesHelper = new THREE.AxesHelper(3);
-	scene.add(axesHelper);
+	//scene.add(axesHelper);
 
 	const camera = new THREE.PerspectiveCamera();
 	camera.fov = 60;
@@ -415,11 +416,12 @@ async function main() {
 		probeHelpers: false,
 		irradianceLight: false,
 		probeGridSize: 15,
-		probeLayerCount: 2,
-		probeLightIntensity: 0.25,
+		probeLayerCount: 1,
+		probeLightIntensity: 0.1,
 		directLightIntensity: 1.0,
 		irradianceLightIntensity: 0.1,
 		considerAngle: false,
+		interpolated: false,
 		probeGrid: "street",
 	};
 	const pane = new Pane({
@@ -465,6 +467,14 @@ async function main() {
 		});
 
 	pane
+		.addBinding(PARAMS, "interpolated", {
+			label: "interpolated light",
+		})
+		.on("change", (ev) => {
+			interpolatedUniform.value = ev.value;
+		});
+
+	pane
 		.addBinding(PARAMS, "followCar", {
 			label: "follow car",
 		})
@@ -489,14 +499,6 @@ async function main() {
 		.on("change", (ev) => {
 			skydomeMesh.setSkyColor(ev.value);
 			updateProbes(scene, renderer);
-		});
-
-	pane
-		.addBinding(PARAMS, "skydomWireframe", {
-			label: "sky wireframe",
-		})
-		.on("change", (ev) => {
-			skydomeMesh.setWireframe(ev.value);
 		});
 
 	pane
@@ -767,6 +769,14 @@ async function main() {
 		});
 
 	/*
+
+	pane
+		.addBinding(PARAMS, "skydomWireframe", {
+			label: "sky wireframe",
+		})
+		.on("change", (ev) => {
+			skydomeMesh.setWireframe(ev.value);
+		});
 
 	pane
 		.addBinding(PARAMS, "mapnormals", {
