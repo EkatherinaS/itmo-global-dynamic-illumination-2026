@@ -69,7 +69,7 @@ export const blurProbeCoeffsUniform = uniform(float(4));
 export const enterShadowAreaUniform = uniform(float(4));
 export const shadowAreaBlurUniform = uniform(float(0));
 
-export const probeLightIntensityUniform = uniform(float(0.25));
+export const probeLightIntensityUniform = uniform(float(0.1));
 export const directLightIntensityUniform = uniform(float(1));
 export const irradianceLightIntensityUniform = uniform(float(0.1));
 
