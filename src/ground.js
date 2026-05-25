@@ -1,21 +1,16 @@
 import * as THREE from "three/webgpu";
 
-import {
-	positionLocal,
-	normalLocal,
-	vec3,
-	vec4,
-	float,
-	uniform,
-} from "three/tsl";
+import { float, positionLocal, vec3, vec4 } from "three/tsl";
 
 export class Ground {
 	constructor(radius, segments, groundColor) {
 		this.radius = radius;
 		this.segments = segments;
 		const tempGroundColor = new THREE.Color(groundColor);
-		this.groundColor = uniform(
-			vec3(tempGroundColor.r, tempGroundColor.g, tempGroundColor.b)
+		this.groundColor = vec3(
+			tempGroundColor.r,
+			tempGroundColor.g,
+			tempGroundColor.b,
 		);
 		this.update();
 	}
@@ -39,17 +34,7 @@ export class Ground {
 		this.scene.add(this.mesh);
 	}
 
-	setGroundColor(color) {
-		const tempGroundColor = new THREE.Color(color);
-		this.groundColor.value.set(
-			tempGroundColor.r,
-			tempGroundColor.g,
-			tempGroundColor.b
-		);
-		this.update();
-	}
-
-	ColorNode() {
+	ColorNodeTransparent() {
 		const groundColor = this.groundColor;
 		const distanceSquared = positionLocal.x.pow(2).add(positionLocal.y.pow(2));
 		const strength = distanceSquared.div(this.radius).div(this.radius);
@@ -57,12 +42,8 @@ export class Ground {
 		return vec4(groundColor, alpha);
 	}
 
-	PositionNode() {
-		return positionLocal;
-	}
-
-	NormalNode() {
-		return normalLocal;
+	ColorNode() {
+		return vec4(this.groundColor, 1.0);
 	}
 
 	getGeometry(radius, segments) {
@@ -70,11 +51,9 @@ export class Ground {
 	}
 
 	getMaterial() {
-		const material = new THREE.MeshLambertMaterial();
-		material.positionNode = this.PositionNode();
+		const material = new THREE.MeshLambertNodeMaterial();
 		material.colorNode = this.ColorNode();
-		material.normalNode = this.NormalNode();
-		material.transparent = true;
+		//material.transparent = true;
 		return material;
 	}
 
@@ -83,5 +62,10 @@ export class Ground {
 		plane.rotateX(-Math.PI / 2);
 		plane.receiveShadow = true;
 		return plane;
+	}
+
+	setMaterialOutputNode(computeValue) {
+		this.material.outputNode = computeValue();
+		this.material.needsUpdate = true;
 	}
 }

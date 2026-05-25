@@ -1,9 +1,5 @@
-import * as THREE from "three/webgpu";
 import DxfParser from "dxf-json";
-import { getIrradianceColor } from "./irradiance-texture";
-import { computeGlobalLight } from "./global-light";
-import { Fn } from "three/src/nodes/TSL.js";
-import { float, color } from "three/tsl";
+import * as THREE from "three/webgpu";
 
 class BoundingBox {
 	constructor(x, y) {
@@ -104,10 +100,10 @@ class Polyline {
 
 		const extrudeSettings = {
 			steps: 1,
-			depth: 50 + Math.random() * 30,
-			bevelEnabled: true,
+			depth: 40 + Math.random() * 20,
+			bevelEnabled: false,
 			bevelThickness: 1.2,
-			bevelSegments: 16,
+			bevelSegments: 4,
 		};
 		return new THREE.ExtrudeGeometry(shape, extrudeSettings);
 	}
@@ -175,9 +171,8 @@ class Model {
 			const material = new THREE.MeshPhongNodeMaterial({
 				color: randcolor,
 				flatShading: false,
+				side: THREE.DoubleSide,
 			});
-			// ENABLE to turn on light from probes
-			material.outputNode = computeGlobalLight();
 
 			const geometry = polyline.getGeometry();
 			geometry.computeVertexNormals();

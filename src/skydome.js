@@ -1,22 +1,22 @@
-import * as THREE from "three/webgpu";
 import { Gyroscope } from "three/addons/misc/Gyroscope.js";
+import * as THREE from "three/webgpu";
 import { getSkyLuminance } from "./luminance-equation";
 
 import {
-	positionLocal,
+	abs,
+	color,
+	float,
+	fog,
+	length,
+	min,
 	negate,
 	normalLocal,
-	vec3,
-	vec4,
-	float,
-	select,
-	uniform,
-	color,
-	min,
-	fog,
-	abs,
+	positionLocal,
 	positionView,
 	positionWorld,
+	uniform,
+	vec3,
+	vec4,
 } from "three/tsl";
 
 // https://publications.ibpsa.org/proceedings/bs/1999/papers/bs1999_PB-01.pdf
@@ -65,24 +65,12 @@ export class Skydome {
 
 	ColorNode() {
 		const skyColor = this.getSkyColor();
-		const groundColor = this.groundColor;
-
 		const strength = min(
 			positionWorld.y.div(this.radius),
 			positionLocal.y.div(this.radius),
 		);
 		const alpha = float(strength).smoothstep(0, 0.2);
-
-		const ground = this.isBackground
-			? vec4(groundColor, float(1))
-			: vec4(0, 0, 0, 0);
-		const sky = this.isBackground
-			? positionLocal.y
-					.smoothstep(0, 0.1)
-					.mix(vec4(groundColor, float(1)), vec4(skyColor, float(1)))
-			: vec4(skyColor, float(alpha));
-
-		return select(positionLocal.y.lessThan(float(0)), ground, sky);
+		return vec4(skyColor, float(alpha));
 	}
 
 	PositionNode() {
@@ -94,7 +82,8 @@ export class Skydome {
 	}
 
 	getSkyColor() {
-		const lva = getSkyLuminance(positionLocal, this.sunDirection, this.nevg);
+		const pos = vec3(positionLocal.x, abs(positionLocal.y), positionLocal.z);
+		const lva = getSkyLuminance(pos, this.sunDirection, this.nevg);
 		return this.skyColor.add(this.white.mul(float(lva).mul(float(0.0001))));
 	}
 
@@ -184,30 +173,25 @@ export class Skydome {
 
 	setBackground(isBackground) {
 		this.isBackground = isBackground;
-		if (isBackground) {
-			this.scene.backgroundNode = this.ColorNode();
-			if (this.gyro) this.gyro.remove(this.mesh);
-			this.setUpFog();
-		} else {
-			this.scene.backgroundNode = color(this.skyColor);
-			this.setUpFog();
-		}
+		this.scene.backgroundNode = this.ColorNode();
+		if (isBackground && this.gyro) this.gyro.remove(this.mesh);
+		this.setUpFog();
 		this.update();
 	}
 
 	setUpFog() {
 		const skyColor = color(this.skyColor);
 		const groundColor = color(this.groundColor);
+		const r = float(this.radius);
 
-		const fogNoiseDistance = abs(positionView.z)
-			.sub(positionWorld.y)
-			.div(this.radius)
+		const fogNoiseDistance = length(positionView.add(vec3(0, r.mul(0.25), 0)))
+			.sub(r.mul(0.75))
+			.div(r)
 			.clamp(0, 1)
-			.smoothstep(0.8, 1);
+			.smoothstep(0.3, 1);
 		const groundFogArea = float(fogNoiseDistance).saturate();
 
-		const fogColor = this.isBackground ? groundColor : skyColor;
-		this.scene.fogNode = fog(fogColor, groundFogArea);
+		this.scene.fogNode = fog(skyColor, groundFogArea);
 	}
 }
 

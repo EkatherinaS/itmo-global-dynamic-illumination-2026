@@ -6,8 +6,10 @@
 	"dependencies": {
 		"dxf-json": "^0.10.1",
 		"gltfpack": "^0.25.0",
+		"stats-js": "1.0.1",
 		"three": "^0.183.1",
-		"tweakpane": "^4.0.5"
+		"tweakpane": "^4.0.5",
+		"webgpu-memory": "1.5.3"
 	},
 	"devDependencies": {
 		"@rollup/plugin-commonjs": "^29.0.0",
