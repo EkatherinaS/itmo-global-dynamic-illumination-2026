@@ -62,7 +62,8 @@ export const probeLightUniform = uniform(false);
 export const directLightUniform = uniform(true);
 export const irradianceLightUniform = uniform(false);
 export const considerAngleUniform = uniform(false);
-export const useStreetGridUniform = uniform(false);
+export const useStreetGridUniform = uniform(true);
+export const interpolatedUniform = uniform(false);
 
 export const blurProbeCoeffsUniform = uniform(float(4));
 export const enterShadowAreaUniform = uniform(float(4));
@@ -468,13 +469,13 @@ export const computeStreetGridProbePositions = Fn(() => {
 
 	const rnd = rand(u.mul(layer.add(1)), v.mul(layer.add(1)));
 	const layerHeight = float(1).div(layerCountUniform);
-	const curLayerHeight = layerHeight.mul(layer.add(1));
+	const curLayerHeight = layerHeight.mul(layer).add(layerHeight.div(2));
 
 	If(allClear, () => {
 		const probes = storage(probePositions, "vec4", probeCountUniform);
 		const coords = getWorldCoordsFromDepthUV(vec2(u, v));
 		probes.element(probeIndex).x = coords.x;
-		probes.element(probeIndex).y = 0.3;
+		probes.element(probeIndex).y = curLayerHeight;
 		probes.element(probeIndex).z = coords.y;
 	});
 });
@@ -495,10 +496,10 @@ export const computeRegularGridProbePositions = Fn(() => {
 	const coords = getWorldCoordsFromDepthUV(gridUV);
 
 	const layerHeight = float(1).div(layerCountUniform);
-	const curLayerHeight = layerHeight.mul(layer.add(1));
+	const curLayerHeight = layerHeight.mul(layer).add(layerHeight.div(2));
 
 	probes.element(instanceIndex).x = coords.x;
-	probes.element(instanceIndex).y = 0.3;
+	probes.element(instanceIndex).y = curLayerHeight;
 	probes.element(instanceIndex).z = coords.y;
 });
 
@@ -675,7 +676,7 @@ export const computeInterpolatedProbeLight = Fn(() => {
 	const result = vec4(0);
 	const probeInds = getNeighbouringProbesSquare(positionWorld);
 
-	const dir = normalWorld;
+	const dir = negate(normalWorld);
 	const x = float(dir.x);
 	const y = float(dir.y);
 	const z = float(dir.z);
@@ -736,8 +737,13 @@ export const computeGlobalLight = Fn(() => {
 		);
 	});
 
-	If(probeLightUniform, () => {
+	If(probeLightUniform.and(interpolatedUniform), () => {
 		const probe = computeInterpolatedProbeLight();
+		result.addAssign(probe.mul(probeLightIntensityUniform));
+	});
+
+	If(probeLightUniform.and(not(interpolatedUniform)), () => {
+		const probe = computeProbeLight();
 		result.addAssign(probe.mul(probeLightIntensityUniform));
 	});
 
