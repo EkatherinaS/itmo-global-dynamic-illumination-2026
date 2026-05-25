@@ -1,16 +1,16 @@
 import {
-	vec3,
-	Fn,
-	uvec2,
-	array,
-	If,
-	float,
-	uint,
-	int,
 	abs,
+	array,
+	float,
+	Fn,
+	If,
+	int,
 	max,
-	vec2,
 	normalWorld,
+	uint,
+	uvec2,
+	vec2,
+	vec3,
 } from "three/tsl";
 
 // +x -x +y -y +z -z
