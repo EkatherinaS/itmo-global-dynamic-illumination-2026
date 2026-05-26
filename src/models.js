@@ -88,7 +88,7 @@ export function moveCar() {
 		if (carModel.position.z > 12) angle -= 2.1;
 		return carModel.position;
 	} else {
-		console.warn("move: car is not defined");
+		//console.warn("move: car is not defined");
 	}
 }
 

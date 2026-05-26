@@ -31,11 +31,12 @@ export const clearProbes = (scene) => {
 };
 
 export const addProbe = (x, y, z) => {
-	const target = new THREE.CubeRenderTarget(64, {
+	const target = new THREE.CubeRenderTarget(32, {
 		format: THREE.RGBAFormat,
 		type: THREE.FloatType,
 	});
 	const camera = new THREE.CubeCamera(0.001, 1, target);
+	target.dispose();
 	camera.position.set(x, y, z);
 	cameras.push(camera);
 };

@@ -4,20 +4,28 @@ export const WIDTH = 32;
 export const HEIGHT = 32;
 export const DEPTH_WIDTH = 512;
 export const DEPTH_HEIGHT = 512;
-export const DEPTH_CAMERA_LEFT = -11;
-export const DEPTH_CAMERA_RIGHT = 11;
-export const DEPTH_CAMERA_TOP = -11;
-export const DEPTH_CAMERA_BOTTOM = 11;
+export const DEPTH_CAMERA_LEFT = -12;
+export const DEPTH_CAMERA_RIGHT = 12;
+export const DEPTH_CAMERA_TOP = -12;
+export const DEPTH_CAMERA_BOTTOM = 12;
 export const SH_COEFFICIENTS_COUNT = 9;
 export const MAX_PROBE_COUNT = 6400;
 
 export let PROBE_GRID_TYPE = "street";
-export let GRID_WIDTH = 15;
-export let GRID_HEIGHT = 15;
+export let GRID_WIDTH = 20;
+export let GRID_HEIGHT = 20;
 export let LAYER_COUNT = 1;
 export let PROBE_COUNT = GRID_WIDTH * GRID_HEIGHT * LAYER_COUNT;
 export let SUN_DIR = new THREE.Vector3(0.1, 0.2, 0.3);
 export let NEVG = 0.75;
+export let BLUR_PROBE_COEF = 4;
+export let ENTER_SHADOW_AREA = 2;
+export let SHADOW_AREA_BLUR = 0;
+export let PROBE_INTENSITY = 0.05;
+export let DIRECT_INTENSITY = 1.0;
+export let IRRAIDANCE_INTENSITY = 0.0;
+export let INTERPOLATE = false;
+export let CONSIDER_ANGLE = false;
 
 export function updateGridSize(value) {
 	GRID_WIDTH = value;
