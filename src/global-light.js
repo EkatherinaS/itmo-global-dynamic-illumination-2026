@@ -7,9 +7,7 @@ import {
 	bool,
 	ceil,
 	clamp,
-	cross,
 	distance,
-	dot,
 	float,
 	floor,
 	instanceIndex,
@@ -19,12 +17,9 @@ import {
 	min,
 	negate,
 	normalWorld,
-	not,
 	output,
 	positionWorld,
-	rand,
 	round,
-	sign,
 	sqrt,
 	storage,
 	textureLoad,
@@ -37,16 +32,25 @@ import {
 	vec4,
 } from "three/tsl";
 import {
+	BLUR_PROBE_COEF,
+	CONSIDER_ANGLE,
 	DEPTH_CAMERA_BOTTOM,
 	DEPTH_CAMERA_LEFT,
 	DEPTH_CAMERA_RIGHT,
 	DEPTH_CAMERA_TOP,
 	DEPTH_HEIGHT,
 	DEPTH_WIDTH,
+	DIRECT_INTENSITY,
+	ENTER_SHADOW_AREA,
 	GRID_HEIGHT,
 	GRID_WIDTH,
+	INTERPOLATE,
+	IRRAIDANCE_INTENSITY,
 	LAYER_COUNT,
 	PROBE_COUNT,
+	PROBE_GRID_TYPE,
+	PROBE_INTENSITY,
+	SHADOW_AREA_BLUR,
 	SH_COEFFICIENTS_COUNT,
 	blurTexture,
 	depthTexture,
@@ -58,20 +62,19 @@ import {
 } from "./constants";
 import { getIrradianceColor } from "./irradiance-texture";
 
-export const probeLightUniform = uniform(false);
-export const directLightUniform = uniform(true);
-export const irradianceLightUniform = uniform(false);
-export const considerAngleUniform = uniform(false);
-export const useStreetGridUniform = uniform(true);
-export const interpolatedUniform = uniform(false);
+export const considerAngleUniform = uniform(CONSIDER_ANGLE);
+export const interpolatedUniform = uniform(INTERPOLATE);
+export const useStreetGridUniform = uniform(PROBE_GRID_TYPE == "street");
 
-export const blurProbeCoeffsUniform = uniform(float(4));
-export const enterShadowAreaUniform = uniform(float(4));
-export const shadowAreaBlurUniform = uniform(float(0));
+export const probeLightIntensityUniform = uniform(float(PROBE_INTENSITY));
+export const directLightIntensityUniform = uniform(float(DIRECT_INTENSITY));
+export const irradianceLightIntensityUniform = uniform(
+	float(IRRAIDANCE_INTENSITY),
+);
 
-export const probeLightIntensityUniform = uniform(float(0.1));
-export const directLightIntensityUniform = uniform(float(1));
-export const irradianceLightIntensityUniform = uniform(float(0.1));
+export const blurProbeCoeffsUniform = uniform(float(BLUR_PROBE_COEF));
+export const enterShadowAreaUniform = uniform(float(ENTER_SHADOW_AREA));
+export const shadowAreaBlurUniform = uniform(float(SHADOW_AREA_BLUR));
 
 export const gridWidthUniform = uniform(float(GRID_WIDTH));
 export const gridHeightUniform = uniform(float(GRID_HEIGHT));
@@ -265,13 +268,13 @@ export const debugDepthMap = Fn(() => {
 		depthTextureTest,
 		uv,
 		vec4(
+			vec3(depth),
 			// depth.sub(0.5).add(visX),
 			// depth.sub(0.5).add(visY),
 			// depth.sub(0.5).add(visZ),
-			// vec3(depth),
-			depth.x.sub(1.0).add(res.element(1).div(probeCountUniform)),
-			depth.y.sub(1.0).add(res.element(2).div(probeCountUniform)),
-			depth.z.sub(1.0).add(res.element(3).div(probeCountUniform)),
+			// depth.x.sub(1.0).add(res.element(1).div(probeCountUniform)),
+			// depth.y.sub(1.0).add(res.element(2).div(probeCountUniform)),
+			// depth.z.sub(1.0).add(res.element(3).div(probeCountUniform)),
 			1.0,
 		),
 	).toReadWrite();
@@ -448,13 +451,11 @@ export const computeStreetGridProbePositions = Fn(() => {
 
 	const uGrid = uint(u.div(rangeWidth));
 	const vGrid = uint(v.div(rangeHeight));
-	const randValue = rand(vec2(u.mul(layer), v.mul(layer)));
-
 	const probeIndex = uint(
 		vGrid.mul(gridWidthUniform).add(uGrid).add(layerProbeCount.mul(layer)),
 	);
 
-	const range = rangeWidth.div(8);
+	const range = rangeWidth.div(4);
 	const allClear = bool(true);
 	const layerDepth = float(layerCountUniform.sub(layer)).div(layerCountUniform);
 
@@ -467,7 +468,6 @@ export const computeStreetGridProbePositions = Fn(() => {
 		});
 	});
 
-	const rnd = rand(u.mul(layer.add(1)), v.mul(layer.add(1)));
 	const layerHeight = float(1).div(layerCountUniform);
 	const curLayerHeight = layerHeight.mul(layer).add(layerHeight.div(2));
 
@@ -553,31 +553,103 @@ export const verticalBlurShader = Fn(() => {
 	textureStore(probeVisibilityCoeffs, vec2(u, v), result).toReadWrite();
 });
 
+const getDistanceWeights = Fn(([probeInds]) => {
+	const probesAll = storage(probePositions, "vec4", probeCountUniform);
+
+	const totalInvDist = float(0);
+	Loop(4, ({ i }) => {
+		const probeInd = probeInds.element(i);
+		If(probeInd.notEqual(-1), () => {
+			const probe = probesAll.element(probeInd);
+			const dist = distance(positionWorld.xz, probe.xz);
+			totalInvDist.addAssign(float(1).div(dist));
+		});
+	});
+
+	const weights = array([float(1), float(0), float(0), float(0)]).toVar();
+	Loop(4, ({ i }) => {
+		const probeInd = probeInds.element(i);
+		If(probeInd.notEqual(-1), () => {
+			const probe = probesAll.element(probeInd);
+			const dist = distance(positionWorld.xz, probe.xz);
+			weights.element(i).assign(float(1).div(dist).div(totalInvDist));
+		});
+	});
+
+	return weights;
+});
+
+const getBarycentricWeights = Fn(([probeInds]) => {
+	const probesAll = storage(probePositions, "vec4", probeCountUniform);
+	const weights = array([float(1), float(0), float(0), float(0)]).toVar();
+
+	If(probeInds.element(2).notEqual(-1), () => {
+		const p0 = probesAll.element(probeInds.element(0)).xz;
+		const p1 = probesAll.element(probeInds.element(1)).xz;
+		const p2 = probesAll.element(probeInds.element(2)).xz;
+		const p = positionWorld.xz;
+
+		const s0 = abs(
+			p.x
+				.mul(p1.y.sub(p2.y))
+				.add(p1.x.mul(p2.y.sub(p.y)))
+				.add(p2.x.mul(p.y.sub(p1.y))),
+		);
+		const s1 = abs(
+			p0.x
+				.mul(p.y.sub(p2.y))
+				.add(p.x.mul(p2.y.sub(p0.y)))
+				.add(p2.x.mul(p0.y.sub(p.y))),
+		);
+		const s2 = abs(
+			p0.x
+				.mul(p1.y.sub(p.y))
+				.add(p1.x.mul(p.y.sub(p0.y)))
+				.add(p.x.mul(p0.y.sub(p1.y))),
+		);
+		const s = s0.add(s1).add(s2);
+
+		weights.element(0).assign(s0.div(s));
+		weights.element(1).assign(s1.div(s));
+		weights.element(2).assign(s2.div(s));
+	}).ElseIf(probeInds.element(1).notEqual(-1), () => {
+		const p0 = probesAll.element(probeInds.element(0));
+		const p1 = probesAll.element(probeInds.element(1));
+
+		const dist0 = float(1).div(distance(positionWorld.xz, p0.xz));
+		const dist1 = float(1).div(distance(positionWorld.xz, p1.xz));
+
+		const sumInv = dist0.add(dist1);
+		weights.element(0).assign(dist0.div(sumInv));
+		weights.element(1).assign(dist1.div(sumInv));
+	});
+
+	return weights;
+});
+
 export const computeProbeLight = Fn(() => {
+	const probesAll = storage(probePositions, "vec4", probeCountUniform);
 	const shCoeffs = storage(
 		sphericalHarmonics,
 		"vec4",
 		probeCountUniform * SH_COEFFICIENTS_COUNT,
 	);
-
-	const result = vec4(0);
-	const uv = getDepthUVFromWorldCoords(positionWorld.xz);
-	const ind = uint(uv.y).mul(DEPTH_WIDTH).add(uv.x);
-
-	const probesAll = storage(probePositions, "vec4", probeCountUniform);
 	const probesVis = storage(
 		probeVisibility,
 		"vec4",
 		DEPTH_HEIGHT * DEPTH_WIDTH,
 	);
+
+	const uv = getDepthUVFromWorldCoords(positionWorld.xz);
+	const ind = uint(uv.y).mul(DEPTH_WIDTH).add(uv.x);
+	const strengthVis = textureLoad(probeVisibilityCoeffs, uv);
+
 	const probeInds = array([
 		probesVis.element(ind).x,
 		probesVis.element(ind).y,
 		probesVis.element(ind).z,
 		probesVis.element(ind).w,
 	]);
-
-	const strengthVis = textureLoad(probeVisibilityCoeffs, uv);
 	const visCoefs = array([
 		strengthVis.x,
 		strengthVis.y,
@@ -585,7 +657,7 @@ export const computeProbeLight = Fn(() => {
 		strengthVis.w,
 	]);
 
-	const dir = negate(normalWorld);
+	const dir = normalWorld;
 	const x = float(dir.x);
 	const y = float(dir.y);
 	const z = float(dir.z);
@@ -603,23 +675,13 @@ export const computeProbeLight = Fn(() => {
 		float(0.546274).mul(x.mul(x).sub(y.mul(y))),
 	]);
 
-	const totalInvDist = float(0);
-	Loop(4, ({ i }) => {
-		const probeInd = probeInds.element(i);
-		If(probeInd.notEqual(-1), () => {
-			const probe = probesAll.element(probeInd);
-			const dist = distance(positionWorld.xz, probe.xz);
-			totalInvDist.addAssign(float(1).div(dist));
-		});
-	});
-
+	const modifs = getDistanceWeights(probeInds);
+	const result = vec4(0);
 	Loop(4, SH_COEFFICIENTS_COUNT, ({ i, j }) => {
-		const probeInd = probeInds.element(i);
 		const coefInd = uint(j);
 
+		const probeInd = probeInds.element(i);
 		const probe = probesAll.element(probeInd);
-		const dist = distance(positionWorld.xz, probe.xz);
-		const modif = float(1).div(dist).div(totalInvDist);
 		const direction = probe.xyz.sub(positionWorld).normalize();
 		const dot = float(1.0);
 
@@ -636,13 +698,13 @@ export const computeProbeLight = Fn(() => {
 				shCoeff
 					.mul(shBasis.element(coefInd))
 					.mul(visCoefs.element(i))
-					.mul(modif)
+					.mul(modifs.element(i))
 					.mul(dot),
 			);
 		});
 	});
 
-	const dist = max(1.0, distance(positionWorld.xz, vec2(0)).sub(10));
+	const dist = max(1.0, distance(positionWorld.xz, vec2(0)).sub(10.5));
 	const distanceModif = max(0.0, float(2.0).sub(dist.mul(dist)));
 	return result.mul(distanceModif);
 });
@@ -676,7 +738,7 @@ export const computeInterpolatedProbeLight = Fn(() => {
 	const result = vec4(0);
 	const probeInds = getNeighbouringProbesSquare(positionWorld);
 
-	const dir = negate(normalWorld);
+	const dir = normalWorld;
 	const x = float(dir.x);
 	const y = float(dir.y);
 	const z = float(dir.z);
@@ -705,8 +767,6 @@ export const computeInterpolatedProbeLight = Fn(() => {
 	Loop(4, SH_COEFFICIENTS_COUNT, ({ i, j }) => {
 		const probeInd = probeInds.element(i);
 		const coefInd = uint(j);
-
-		const probe = probesAll.element(probeInd);
 		const modif = weights.element(i);
 
 		const shCoeff = vec4(
@@ -719,30 +779,24 @@ export const computeInterpolatedProbeLight = Fn(() => {
 	});
 
 	const dist = max(1.0, distance(positionWorld.xz, vec2(0)).sub(10));
-	const distanceModif = max(0.0, float(2.0).sub(dist.mul(dist)));
+	const distanceModif = max(0.0, float(5.0).sub(dist.mul(dist)));
 	return result.mul(distanceModif);
 });
 
 export const computeGlobalLight = Fn(() => {
 	const result = vec3(0.0);
 
-	If(directLightUniform, () => {
-		result.addAssign(output.mul(directLightIntensityUniform));
-	});
+	result.addAssign(output.mul(directLightIntensityUniform));
 
-	If(irradianceLightUniform, () => {
-		const irradiance = getIrradianceColor();
-		result.addAssign(
-			irradiance.mul(materialColor).mul(irradianceLightIntensityUniform),
-		);
-	});
+	const irradiance = getIrradianceColor();
+	result.addAssign(
+		irradiance.mul(materialColor).mul(irradianceLightIntensityUniform),
+	);
 
-	If(probeLightUniform.and(interpolatedUniform), () => {
+	If(interpolatedUniform, () => {
 		const probe = computeInterpolatedProbeLight();
 		result.addAssign(probe.mul(probeLightIntensityUniform));
-	});
-
-	If(probeLightUniform.and(not(interpolatedUniform)), () => {
+	}).Else(() => {
 		const probe = computeProbeLight();
 		result.addAssign(probe.mul(probeLightIntensityUniform));
 	});
