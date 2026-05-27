@@ -3,6 +3,8 @@ import * as THREE from "three/webgpu";
 import { LightProbeGenerator } from "../node_modules/three/examples/jsm/lights/LightProbeGenerator.js";
 import {
 	PROBE_COUNT,
+	PROBE_RENDER_TARGET_SIZE,
+	probeCameraTarget,
 	SH_COEFFICIENTS_COUNT,
 	sphericalHarmonics,
 } from "./constants.js";
@@ -31,7 +33,7 @@ export const clearProbes = (scene) => {
 };
 
 export const addProbe = (x, y, z) => {
-	const target = new THREE.CubeRenderTarget(32, {
+	const target = new THREE.CubeRenderTarget(PROBE_RENDER_TARGET_SIZE, {
 		format: THREE.RGBAFormat,
 		type: THREE.FloatType,
 	});
@@ -43,35 +45,24 @@ export const addProbe = (x, y, z) => {
 
 export const updateProbes = async (scene, renderer) => {
 	const blockSize = SH_COEFFICIENTS_COUNT * 4;
-	const data = new Float32Array(blockSize * PROBE_COUNT);
-	clearHelpers(scene);
-
 	for (let i = 0; i < cameras.length; i++) {
 		const camera = cameras[i];
 		camera.update(renderer, scene);
-
-		const lightprobe = await LightProbeGenerator.fromCubeRenderTarget(
-			renderer,
-			camera.renderTarget,
-		);
-		LightProbeGenerator.data = null;
-
-		lightprobe.position.copy(camera.position);
-		lightprobe.sh.coefficients.forEach((v, j) => {
-			data[i * blockSize + j * 3] = v.x;
-			data[i * blockSize + j * 3 + 1] = v.y;
-			data[i * blockSize + j * 3 + 2] = v.z;
-		});
-
-		sphericalHarmonics.copyArray(data);
-		sphericalHarmonics.needsUpdate = true;
-
-		const helper = new LightProbeHelper(lightprobe, 0.2);
-		helper.visible = false;
-		helpers.push(helper);
-		scene.add(helper);
-
-		lightprobe.dispose();
+		const imageWidth = camera.renderTarget.width;
+		for (let faceIndex = 0; faceIndex < 6; faceIndex++) {
+			const data = await renderer.readRenderTargetPixelsAsync(
+				camera.renderTarget,
+				0,
+				0,
+				imageWidth,
+				imageWidth,
+				0,
+				faceIndex,
+			);
+			const faceSize = PROBE_RENDER_TARGET_SIZE * PROBE_RENDER_TARGET_SIZE * 4;
+			const index = i * 6 * faceSize + faceIndex * faceSize;
+			probeCameraTarget.array.set(data, index);
+		}
 	}
 };
 

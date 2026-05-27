@@ -31,8 +31,10 @@ import {
 	PROBE_COUNT,
 	PROBE_GRID_TYPE,
 	PROBE_INTENSITY,
+	probeCameraTarget,
 	probePositions,
 	SHADOW_AREA_BLUR,
+	sphericalHarmonics,
 	SUN_DIR,
 	updateGridSize,
 	updateLayerCount,
@@ -45,26 +47,31 @@ import {
 } from "./constants";
 import {
 	blurProbeCoeffsUniform,
-	computeGlobalLight,
-	computeProbeVisibility,
-	computeRegularGridProbePositions,
-	computeStreetGridProbePositions,
 	considerAngleUniform,
-	debugDepthMap,
-	debugProbes,
 	directLightIntensityUniform,
 	enterShadowAreaUniform,
 	gridHeightUniform,
 	gridWidthUniform,
-	horizontalBlurShader,
 	interpolatedUniform,
 	irradianceLightIntensityUniform,
 	layerCountUniform,
 	probeCountUniform,
 	probeLightIntensityUniform,
 	shadowAreaBlurUniform,
+} from "./global-helpers.js";
+import {
+	computeGlobalLight,
+	computeProbeVisibility,
+	horizontalBlurShader,
 	verticalBlurShader,
+	debugDepthMap,
+	debugProbes,
 } from "./global-light.js";
+import {
+	computeProbeCoeffs,
+	computeRegularGridProbePositions,
+	computeStreetGridProbePositions,
+} from "./global-probe.js";
 import { Ground } from "./ground.js";
 import {
 	computeIrradianceCubemapFromLightBuffer,
@@ -84,7 +91,6 @@ import {
 	linkCameraToCar,
 	loadCar,
 	loadMapDxf,
-	loadMapGlb,
 	moveCar,
 	unLinkCameraFromCar,
 	updateMaterialsCar,
@@ -162,6 +168,7 @@ async function main() {
 	);
 	let updateDebugDepthMap = debugDepthMap().compute(DEPTH_WIDTH * DEPTH_HEIGHT);
 	let updateDebugProbes = debugProbes().compute(PROBE_COUNT);
+	let updateProbeCoeffs = computeProbeCoeffs().compute(PROBE_COUNT);
 	let updateProbeVisibility = computeProbeVisibility().compute(
 		DEPTH_WIDTH * DEPTH_HEIGHT,
 	);
@@ -276,7 +283,7 @@ async function main() {
 		const bufferArray = await renderer.getArrayBufferAsync(probePositions);
 		const outputData = new Float32Array(bufferArray);
 
-		for (let i = 0; i < PROBE_COUNT - 1; i++) {
+		for (let i = 0; i < PROBE_COUNT; i++) {
 			if (outputData[i * 4 + 1] !== 0) {
 				addProbe(
 					outputData[i * 4 + 0],
@@ -287,6 +294,12 @@ async function main() {
 		}
 
 		await updateProbes(scene, renderer);
+		await renderer.compute(updateProbeCoeffs);
+
+		console.log(probeCameraTarget.array);
+		const arrayBuffer = await renderer.getArrayBufferAsync(sphericalHarmonics);
+		const data = new Float32Array(arrayBuffer);
+		console.log(data);
 
 		const mem = getWebGPUMemoryUsage().memory;
 		console.log(`Буферы: ${(mem.buffer / 1048576).toFixed(2)} MB`);
