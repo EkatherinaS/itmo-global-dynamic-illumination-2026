@@ -4,13 +4,14 @@ import { DXFLoader } from "./dxf-countour-loader.js";
 import { computeGlobalLight } from "./global-light";
 
 const loader = new GLTFLoader();
-let carModel, mapModel;
+let carModel, mapModel, bridgeModel;
 let helpers = [];
 
 const CAR_GOL_QUADRO = "public/models/gol_quadrado.glb";
 const CAR_PORSCHE_911 = "public/models/porsche_911.glb";
 const MAP_1KM = "public/models/map_colored.glb";
 const MAP_CONTOURS = "public/models/contours.dxf";
+const BRIDGE = "public/models/bridge.glb";
 
 export function loadCar(callback) {
 	loader.load(
@@ -27,6 +28,22 @@ export function loadCar(callback) {
 			carModel.position.set(2, 0, 1.5);
 			carModel.scale.set(0.22, 0.22, 0.22);
 			carModel.rotateY(-1);
+			callback();
+		},
+		undefined,
+		(error) => {
+			console.error(error);
+		},
+	);
+}
+
+export function loadBridgeGlb(callback) {
+	loader.load(
+		BRIDGE,
+		(gltf) => {
+			bridgeModel = gltf.scene;
+			bridgeModel.position.set(9, -0.1, 4);
+			bridgeModel.scale.set(0.03, 0.03, 0.03);
 			callback();
 		},
 		undefined,
@@ -100,6 +117,14 @@ export function unLinkCameraFromCar(camera) {
 	carModel.remove(camera);
 }
 
+export function addBridge(scene) {
+	if (bridgeModel) {
+		scene.add(bridgeModel);
+	} else {
+		console.warn("add: bridge is not defined");
+	}
+}
+
 export function addCar(scene) {
 	if (carModel) {
 		scene.add(carModel);
@@ -136,6 +161,20 @@ export function updateMaterialsCar() {
 	if (carModel) {
 		carModel.traverse((o) => {
 			if (o.isMesh) o.material.outputNode = computeGlobalLight();
+		});
+	}
+}
+
+export function updateMaterialsBridge() {
+	if (bridgeModel) {
+		const material = new THREE.MeshPhongNodeMaterial({
+			color: 0xffffff,
+			flatShading: false,
+			side: THREE.DoubleSide,
+			outputNode: computeGlobalLight(),
+		});
+		bridgeModel.traverse((o) => {
+			if (o.isMesh) o.material = material;
 		});
 	}
 }

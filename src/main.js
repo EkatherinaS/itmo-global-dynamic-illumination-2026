@@ -79,14 +79,17 @@ import {
 	getLuminanceCubemap,
 } from "./luminance-texture.js";
 import {
+	addBridge,
 	addCar,
 	addMap,
 	linkCameraToCar,
+	loadBridgeGlb,
 	loadCar,
 	loadMapDxf,
 	loadMapGlb,
 	moveCar,
 	unLinkCameraFromCar,
+	updateMaterialsBridge,
 	updateMaterialsCar,
 	updateMaterialsMap,
 } from "./models.js";
@@ -239,16 +242,20 @@ async function main() {
 
 	// MODELS
 
-	loadMapDxf(() => {
-		addMap(scene);
-		computeDepthMap();
-		updateComputeProbes();
-		updateMaterialsMap();
-		ground.setMaterialOutputNode(computeGlobalLight);
+	loadBridgeGlb(() => {
+		addBridge(scene);
+		loadMapDxf(() => {
+			addMap(scene);
+			computeDepthMap();
+			updateComputeProbes();
+			updateMaterialsBridge();
+			updateMaterialsMap();
+			ground.setMaterialOutputNode(computeGlobalLight);
 
-		loadCar(() => {
-			addCar(scene);
-			updateMaterialsCar();
+			loadCar(() => {
+				addCar(scene);
+				updateMaterialsCar();
+			});
 		});
 	});
 
