@@ -284,17 +284,20 @@ async function main() {
 		const outputData = new Float32Array(bufferArray);
 
 		for (let i = 0; i < PROBE_COUNT; i++) {
-			if (outputData[i * 4 + 1] !== 0) {
-				addProbe(
-					outputData[i * 4 + 0],
-					outputData[i * 4 + 1],
-					outputData[i * 4 + 2],
-				);
-			}
+			addProbe(
+				outputData[i * 4 + 0],
+				outputData[i * 4 + 1],
+				outputData[i * 4 + 2],
+			);
 		}
 
 		await updateProbes(scene, renderer);
+		const start = performance.now();
 		await renderer.compute(updateProbeCoeffs);
+		const end = performance.now();
+		console.log(
+			`Время выполнения updateProbeCoeffs: ${(end - start).toFixed(2)} мс`,
+		);
 
 		console.log(probeCameraTarget.array);
 		const arrayBuffer = await renderer.getArrayBufferAsync(sphericalHarmonics);
@@ -522,9 +525,17 @@ async function main() {
 			label: "sky color",
 			view: "color",
 		})
-		.on("change", (ev) => {
+		.on("change", async (ev) => {
+			if (!ev.last) return;
 			skydomeMesh.setSkyColor(ev.value);
-			updateProbes(scene, renderer);
+
+			await updateProbes(scene, renderer);
+			const start = performance.now();
+			await renderer.compute(updateProbeCoeffs);
+			const end = performance.now();
+			console.log(
+				`Время выполнения updateProbeCoeffs: ${(end - start).toFixed(2)} мс`,
+			);
 		});
 
 	pane
@@ -534,7 +545,7 @@ async function main() {
 			max: 1,
 			step: 0.01,
 		})
-		.on("change", (ev) => {
+		.on("change", async (ev) => {
 			updateSunDirectionX(ev.value);
 			const normSunDir = SUN_DIR.clone().normalize();
 			skydomeMesh.setSunDirection(normSunDir);
@@ -550,7 +561,14 @@ async function main() {
 			updateComputeSkydom();
 
 			light.position.copy(normSunDir.multiplyScalar(10));
-			updateProbes(scene, renderer);
+
+			await updateProbes(scene, renderer);
+			const start = performance.now();
+			await renderer.compute(updateProbeCoeffs);
+			const end = performance.now();
+			console.log(
+				`Время выполнения updateProbeCoeffs: ${(end - start).toFixed(2)} мс`,
+			);
 		});
 
 	pane
@@ -560,7 +578,7 @@ async function main() {
 			max: 1,
 			step: 0.01,
 		})
-		.on("change", (ev) => {
+		.on("change", async (ev) => {
 			updateSunDirectionY(ev.value);
 			const normSunDir = SUN_DIR.clone().normalize();
 			skydomeMesh.setSunDirection(normSunDir);
@@ -576,7 +594,14 @@ async function main() {
 			updateComputeSkydom();
 
 			light.position.copy(normSunDir.multiplyScalar(10));
-			updateProbes(scene, renderer);
+
+			await updateProbes(scene, renderer);
+			const start = performance.now();
+			await renderer.compute(updateProbeCoeffs);
+			const end = performance.now();
+			console.log(
+				`Время выполнения updateProbeCoeffs: ${(end - start).toFixed(2)} мс`,
+			);
 		});
 
 	pane
@@ -586,7 +611,7 @@ async function main() {
 			max: 1,
 			step: 0.01,
 		})
-		.on("change", (ev) => {
+		.on("change", async (ev) => {
 			updateSunDirectionZ(ev.value);
 			const normSunDir = SUN_DIR.clone().normalize();
 			skydomeMesh.setSunDirection(normSunDir);
@@ -602,7 +627,14 @@ async function main() {
 			updateComputeSkydom();
 
 			light.position.copy(normSunDir.multiplyScalar(10));
-			updateProbes(scene, renderer);
+
+			await updateProbes(scene, renderer);
+			const start = performance.now();
+			await renderer.compute(updateProbeCoeffs);
+			const end = performance.now();
+			console.log(
+				`Время выполнения updateProbeCoeffs: ${(end - start).toFixed(2)} мс`,
+			);
 		});
 
 	pane
@@ -612,7 +644,7 @@ async function main() {
 			max: 1,
 			step: 0.01,
 		})
-		.on("change", (ev) => {
+		.on("change", async (ev) => {
 			updateNevg(ev.value);
 			skydomeMesh.setNevg(NEVG);
 
@@ -627,7 +659,14 @@ async function main() {
 			);
 
 			updateComputeSkydom();
-			updateProbes(scene, renderer);
+
+			await updateProbes(scene, renderer);
+			const start = performance.now();
+			await renderer.compute(updateProbeCoeffs);
+			const end = performance.now();
+			console.log(
+				`Время выполнения updateProbeCoeffs: ${(end - start).toFixed(2)} мс`,
+			);
 		});
 
 	// включение/выключение хелперов проб

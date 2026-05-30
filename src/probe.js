@@ -37,13 +37,13 @@ export const addProbe = (x, y, z) => {
 		format: THREE.RGBAFormat,
 		type: THREE.FloatType,
 	});
-	const camera = new THREE.CubeCamera(0.001, 1, target);
-	target.dispose();
+	const camera = new THREE.CubeCamera(0.001, 2, target);
 	camera.position.set(x, y, z);
 	cameras.push(camera);
 };
 
 export const updateProbes = async (scene, renderer) => {
+	const start = performance.now();
 	const blockSize = SH_COEFFICIENTS_COUNT * 4;
 	for (let i = 0; i < cameras.length; i++) {
 		const camera = cameras[i];
@@ -64,6 +64,10 @@ export const updateProbes = async (scene, renderer) => {
 			probeCameraTarget.array.set(data, index);
 		}
 	}
+	probeCameraTarget.needsUpdate = true;
+
+	const end = performance.now();
+	console.log(`Время выполнения updateProbes: ${(end - start).toFixed(2)} мс`);
 };
 
 export const showLightProbeHelpers = () => {

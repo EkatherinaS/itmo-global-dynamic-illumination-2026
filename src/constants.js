@@ -9,12 +9,12 @@ export const DEPTH_CAMERA_RIGHT = 12;
 export const DEPTH_CAMERA_TOP = -12;
 export const DEPTH_CAMERA_BOTTOM = 12;
 export const SH_COEFFICIENTS_COUNT = 9;
-export const MAX_PROBE_COUNT = 6400;
+export const MAX_PROBE_COUNT = 5400;
 export const PROBE_RENDER_TARGET_SIZE = 16;
 
 export let PROBE_GRID_TYPE = "street";
-export let GRID_WIDTH = 2;
-export let GRID_HEIGHT = 2;
+export let GRID_WIDTH = 20;
+export let GRID_HEIGHT = 20;
 export let LAYER_COUNT = 1;
 export let PROBE_COUNT = GRID_WIDTH * GRID_HEIGHT * LAYER_COUNT;
 export let SUN_DIR = new THREE.Vector3(0.1, 0.2, 0.3);
@@ -77,12 +77,15 @@ export const depthTextureTest = new THREE.StorageTexture(
 
 // cannot be disposed yet - using max count https://github.com/mrdoob/three.js/issues/32969
 export const probeCameraTarget = new THREE.StorageBufferAttribute(
-	PROBE_COUNT * PROBE_RENDER_TARGET_SIZE * PROBE_RENDER_TARGET_SIZE * 6,
+	MAX_PROBE_COUNT * PROBE_RENDER_TARGET_SIZE * PROBE_RENDER_TARGET_SIZE * 6,
 	4,
 );
-export const probePositions = new THREE.StorageBufferAttribute(PROBE_COUNT, 4);
+export const probePositions = new THREE.StorageBufferAttribute(
+	MAX_PROBE_COUNT,
+	4,
+);
 export const sphericalHarmonics = new THREE.StorageBufferAttribute(
-	SH_COEFFICIENTS_COUNT * PROBE_COUNT,
+	SH_COEFFICIENTS_COUNT * MAX_PROBE_COUNT,
 	4,
 );
 

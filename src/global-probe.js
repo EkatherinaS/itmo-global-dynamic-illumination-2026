@@ -6,6 +6,8 @@ import {
 	Switch,
 	array,
 	bool,
+	color,
+	convertColorSpace,
 	float,
 	floor,
 	instanceIndex,
@@ -41,6 +43,7 @@ import {
 	layerCountUniform,
 	probeCountUniform,
 } from "./global-helpers";
+import { LinearSRGBColorSpace, SRGBColorSpace } from "three/webgpu";
 
 export const getNeighbouringProbes = Fn(([uv]) => {
 	const rangeWidth = float(DEPTH_WIDTH).div(gridWidthUniform);
@@ -245,10 +248,24 @@ export const computeProbeCoeffs = Fn(() => {
 		const g = rtStorage.element(rtStorageInd).y;
 		const b = rtStorage.element(rtStorageInd).z;
 
-		const u = floor(float(localIndex).mod(rtWidth).div(rtWidth));
-		const v = floor(float(localIndex).div(rtWidth).div(rtWidth));
-		const col = float(1).sub(u).mul(flip);
-		const row = float(1).sub(v);
+		const linearColor = color(r, g, b);
+		// convertColorSpace(
+		// 	color(r, g, b, 1.0),
+		// 	SRGBColorSpace,
+		// 	LinearSRGBColorSpace,
+		// );
+
+		const ix = int(localIndex).mod(int(rtWidth));
+		const iy = int(localIndex).div(int(rtWidth));
+		const u_center = float(ix).add(0.5).div(rtWidth);
+		const v_center = float(iy).add(0.5).div(rtWidth);
+		const col = float(1.0).sub(u_center).mul(2.0).sub(1.0);
+		const row = float(1.0).sub(v_center).mul(2.0).sub(1.0);
+
+		// const u = float(localIndex).mod(rtWidth).div(rtWidth);
+		// const v = float(localIndex).div(rtWidth).div(rtWidth);
+		// const col = float(1).sub(u).mul(flip);
+		// const row = float(1).sub(v);
 
 		Switch(faceIndex)
 			.Case(0, () => {
@@ -287,7 +304,7 @@ export const computeProbeCoeffs = Fn(() => {
 			float(0.546274).mul(dir.x.mul(dir.x).sub(dir.y.mul(dir.y))),
 		]);
 
-		const weighedColor = vec3(r, g, b).mul(weight);
+		const weighedColor = linearColor.mul(weight);
 		shCoefficients.element(0).addAssign(weighedColor.mul(shBasis.element(0)));
 		shCoefficients.element(1).addAssign(weighedColor.mul(shBasis.element(1)));
 		shCoefficients.element(2).addAssign(weighedColor.mul(shBasis.element(2)));
@@ -298,6 +315,7 @@ export const computeProbeCoeffs = Fn(() => {
 		shCoefficients.element(7).addAssign(weighedColor.mul(shBasis.element(7)));
 		shCoefficients.element(8).addAssign(weighedColor.mul(shBasis.element(8)));
 	});
+
 	const norm = float(4).mul(PI).div(totalWeight);
 	const coefIndex = probeInd.mul(SH_COEFFICIENTS_COUNT);
 
