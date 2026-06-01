@@ -182,7 +182,7 @@ async function main() {
 	light.shadow.blurSamples = 4;
 	light.shadow.mapSize.width = 1024;
 	light.shadow.mapSize.height = 1024;
-	light.shadow.bias = -0.005;
+	light.shadow.bias = -0.002;
 
 	light.shadow.camera.rotation.set(0);
 	light.shadow.camera.left = -15;
@@ -230,7 +230,7 @@ async function main() {
 	skydomeMesh.setCamera(camera);
 	skydomeMesh.setScene(scene);
 
-	const ground = new Ground(100, 64, 0x1b1b1b);
+	const ground = new Ground(20, 16, 0x1b1b1b);
 	ground.setScene(scene);
 
 	const skyHelper = new VertexNormalsHelper(skydomeMesh.mesh, 1, 0xff0000);

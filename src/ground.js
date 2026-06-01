@@ -18,20 +18,28 @@ export class Ground {
 	update() {
 		if (this.mesh && this.scene) {
 			this.scene.remove(this.mesh);
+			this.scene.remove(this.meshLower);
 		}
 
 		this.geometry = this.getGeometry(this.radius, this.segments);
 		this.material = this.getMaterial(this.isWireframe);
 		this.mesh = this.getMesh(this.geometry, this.material);
 
+		this.geometryLower = this.getGeometry(this.radius * 10, this.segments);
+		this.materialLower = this.getMaterial(this.isWireframe);
+		this.meshLower = this.getMesh(this.geometryLower, this.materialLower);
+		this.meshLower.position.set(0, -0.1, 0);
+
 		if (this.scene) {
 			this.scene.add(this.mesh);
+			this.scene.add(this.meshLower);
 		}
 	}
 
 	setScene(scene) {
 		this.scene = scene;
 		this.scene.add(this.mesh);
+		this.scene.add(this.meshLower);
 	}
 
 	ColorNodeTransparent() {

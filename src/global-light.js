@@ -628,84 +628,108 @@ const getBarycentricWeights = Fn(([probeInds]) => {
 });
 
 export const computeProbeLight = Fn(() => {
-	const probesAll = storage(probePositions, "vec4", probeCountUniform);
-	const shCoeffs = storage(
-		sphericalHarmonics,
-		"vec4",
-		probeCountUniform * SH_COEFFICIENTS_COUNT,
-	);
-	const probesVis = storage(
-		probeVisibility,
-		"vec4",
-		DEPTH_HEIGHT * DEPTH_WIDTH,
-	);
-
-	const uv = getDepthUVFromWorldCoords(positionWorld.xz);
-	const ind = uint(uv.y).mul(DEPTH_WIDTH).add(uv.x);
-	const strengthVis = textureLoad(probeVisibilityCoeffs, uv);
-
-	const probeInds = array([
-		probesVis.element(ind).x,
-		probesVis.element(ind).y,
-		probesVis.element(ind).z,
-		probesVis.element(ind).w,
-	]);
-	const visCoefs = array([
-		strengthVis.x,
-		strengthVis.y,
-		strengthVis.z,
-		strengthVis.w,
-	]);
-
-	const dir = normalWorld;
-	const x = float(dir.x);
-	const y = float(dir.y);
-	const z = float(dir.z);
-
-	//https://github.com/mrdoob/three.js/blob/dev/src/math/SphericalHarmonics3.js
-	const shBasis = array([
-		float(0.282095),
-		float(0.488603).mul(y),
-		float(0.488603).mul(z),
-		float(0.488603).mul(x),
-		float(1.092548).mul(x).mul(y),
-		float(1.092548).mul(y).mul(z),
-		float(0.315392).mul(float(3).mul(z).mul(z).sub(1)),
-		float(1.092548).mul(x).mul(z),
-		float(0.546274).mul(x.mul(x).sub(y.mul(y))),
-	]);
-
-	const modifs = getDistanceWeights(probeInds);
+	const dist = max(1.0, distance(positionWorld.xz, vec2(0)).sub(10.5));
+	const distanceModif = max(0.0, float(2.0).sub(dist.mul(dist)));
 	const result = vec4(0);
-	Loop(4, SH_COEFFICIENTS_COUNT, ({ i, j }) => {
-		const coefInd = uint(j);
 
-		const probeInd = probeInds.element(i);
-		const probe = probesAll.element(probeInd);
-		const direction = probe.xyz.sub(positionWorld).normalize();
-		const dot = float(1.0);
-
-		If(considerAngleUniform, () => {
-			dot.assign(direction.dot(normalWorld));
-		});
-
-		const shCoeff = vec4(
-			shCoeffs.element(probeInd.mul(SH_COEFFICIENTS_COUNT).add(coefInd)),
+	If(distanceModif.greaterThan(0), () => {
+		const shCoeffs = storage(
+			sphericalHarmonics,
+			"vec4",
+			probeCountUniform * SH_COEFFICIENTS_COUNT,
+		);
+		const probesVis = storage(
+			probeVisibility,
+			"vec4",
+			DEPTH_HEIGHT * DEPTH_WIDTH,
 		);
 
-		If(probeInd.notEqual(-1), () => {
-			result.addAssign(
-				shCoeff
-					.mul(shBasis.element(coefInd))
-					.mul(visCoefs.element(i))
-					.mul(modifs.element(i))
-					.mul(dot),
+		const uv = getDepthUVFromWorldCoords(positionWorld.xz);
+		const ind = uint(uv.y).mul(DEPTH_WIDTH).add(uv.x);
+		const strengthVis = textureLoad(probeVisibilityCoeffs, uv);
+
+		const probeInds = array([
+			probesVis.element(ind).x,
+			probesVis.element(ind).y,
+			probesVis.element(ind).z,
+			probesVis.element(ind).w,
+		]);
+		const visCoefs = array([
+			strengthVis.x,
+			strengthVis.y,
+			strengthVis.z,
+			strengthVis.w,
+		]);
+
+		const dir = normalWorld;
+		const x = float(dir.x);
+		const y = float(dir.y);
+		const z = float(dir.z);
+
+		//https://github.com/mrdoob/three.js/blob/dev/src/math/SphericalHarmonics3.js
+		const shBasis = array([
+			float(0.282095),
+			float(0.488603).mul(y),
+			float(0.488603).mul(z),
+			float(0.488603).mul(x),
+			float(1.092548).mul(x).mul(y),
+			float(1.092548).mul(y).mul(z),
+			float(0.315392).mul(float(3).mul(z).mul(z).sub(1)),
+			float(1.092548).mul(x).mul(z),
+			float(0.546274).mul(x.mul(x).sub(y.mul(y))),
+		]);
+
+		const probesAll = storage(probePositions, "vec4", probeCountUniform);
+		const probes = array([
+			probesAll.element(max(0, probeInds.element(0))),
+			probesAll.element(max(0, probeInds.element(1))),
+			probesAll.element(max(0, probeInds.element(2))),
+			probesAll.element(max(0, probeInds.element(3))),
+		]);
+
+		const totalInvDist = float(0);
+		Loop(4, ({ i }) => {
+			const probeInd = probeInds.element(i);
+			If(probeInd.notEqual(-1), () => {
+				const dist = distance(positionWorld.xz, probes.element(i).xz);
+				totalInvDist.addAssign(float(1).div(dist));
+			});
+		});
+
+		const modifs = array([float(1), float(0), float(0), float(0)]).toVar();
+		Loop(4, ({ i }) => {
+			const probeInd = probeInds.element(i);
+			If(probeInd.notEqual(-1), () => {
+				const dist = distance(positionWorld.xz, probes.element(i).xz);
+				modifs.element(i).assign(float(1).div(dist).div(totalInvDist));
+			});
+		});
+
+		Loop(4, SH_COEFFICIENTS_COUNT, ({ i, j }) => {
+			const probeInd = probeInds.element(i);
+			const shCoeff = vec4(
+				shCoeffs.element(probeInd.mul(SH_COEFFICIENTS_COUNT).add(j)),
 			);
+
+			const direction = probes.element(i).xyz.sub(positionWorld).normalize();
+			const dot = float(1.0);
+
+			If(considerAngleUniform, () => {
+				dot.assign(direction.dot(normalWorld));
+			});
+
+			If(probeInd.notEqual(-1), () => {
+				result.addAssign(
+					shCoeff
+						.mul(shBasis.element(j))
+						.mul(visCoefs.element(i))
+						.mul(modifs.element(i))
+						.mul(dot),
+				);
+			});
 		});
 	});
 
-	const dist = max(1.0, distance(positionWorld.xz, vec2(0)).sub(10.5));
-	const distanceModif = max(0.0, float(2.0).sub(dist.mul(dist)));
 	return result.mul(distanceModif);
 });
 
