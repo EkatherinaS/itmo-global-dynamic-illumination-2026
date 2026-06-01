@@ -277,7 +277,7 @@ export const debugDepthMap = Fn(() => {
 			// depth.z.sub(1.0).add(res.element(3).div(probeCountUniform)),
 			1.0,
 		),
-	).toReadWrite();
+	);
 });
 
 const computeVisibilityForUV = Fn(({ pointUV, probe }) => {
@@ -414,7 +414,7 @@ export const computeProbeVisibility = Fn(() => {
 			visibility.element(p2),
 			visibility.element(p3),
 		),
-	).toReadWrite();
+	);
 });
 
 export const debugProbes = Fn(() => {
@@ -434,7 +434,7 @@ export const debugProbes = Fn(() => {
 				depthTextureTest,
 				vec2(startX.add(i), startY.add(j)),
 				vec4(1.0, 0.1, 0.4, 1.0),
-			).toReadWrite();
+			);
 		});
 	});
 });
@@ -526,7 +526,7 @@ export const horizontalBlurShader = Fn(() => {
 	const samplesCount = float(diameter);
 	const result = sum.div(samplesCount);
 
-	textureStore(blurTexture, vec2(u, v), result).toReadWrite();
+	textureStore(blurTexture, vec2(u, v), result);
 });
 
 export const verticalBlurShader = Fn(() => {
@@ -550,7 +550,7 @@ export const verticalBlurShader = Fn(() => {
 	});
 
 	const result = sum.div(float(diameter));
-	textureStore(probeVisibilityCoeffs, vec2(u, v), result).toReadWrite();
+	textureStore(probeVisibilityCoeffs, vec2(u, v), result);
 });
 
 const getBarycentricWeights = Fn(([probeInds]) => {

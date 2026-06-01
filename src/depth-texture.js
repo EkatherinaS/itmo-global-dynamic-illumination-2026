@@ -6,5 +6,5 @@ export const computeDepthTextureTest = Fn(() => {
 	const indY = instanceIndex.div(WIDTH);
 	const indexUV = uvec2(indX, indY);
 	const value = textureLoad(depthTexture, indexUV);
-	textureStore(depthTextureTest, indexUV, value).toReadWrite();
+	textureStore(depthTextureTest, indexUV, value);
 });

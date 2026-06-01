@@ -144,7 +144,7 @@ export const computeLuminanceCubemap = Fn(({ nevg, sunDir }) => {
 		const face = uint(i);
 		color = getColorOnSide(nevg, sunDir, face);
 		indexUV = getUVOnFace(face, indX, indY, w, h);
-		textureStore(luminanceStorageCubemap, indexUV, color).toReadWrite();
+		textureStore(luminanceStorageCubemap, indexUV, color);
 	});
 });
 

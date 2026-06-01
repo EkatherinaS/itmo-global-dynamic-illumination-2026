@@ -98,7 +98,7 @@ export const computeIrradianceCubemapFromBuffer = Fn(() => {
 		irradianceStorageCubemap,
 		indexUV,
 		white.mul(irradiance).div(correction).div(size),
-	).toReadWrite();
+	);
 });
 
 // LIGHT BUFFER + DOT MULTIPLY LIGHT DIRS WITH NORMALS
@@ -165,11 +165,7 @@ export const computeIrradianceCubemapFromLightBuffer = Fn(() => {
 
 		//const ind = uint(face).mul(WIDTH * HEIGHT).add(indY.mul(WIDTH)).add(indX);
 		const indexUV = getUVOnFace(face, indX, indY, w, h);
-		textureStore(
-			irradianceStorageCubemap,
-			indexUV,
-			result.div(WIDTH * HEIGHT),
-		).toReadWrite();
+		textureStore(irradianceStorageCubemap, indexUV, result.div(WIDTH * HEIGHT));
 	});
 });
 
@@ -218,7 +214,7 @@ export const computeIrradianceCubemapWithLoop = Fn(() => {
 		const indexUV = getUVOnFace(face, indX, indY, w, h);
 		const irradiance = white.mul(result).div(WIDTH * HEIGHT * 6);
 
-		textureStore(irradianceStorageCubemap, indexUV, irradiance).toReadWrite();
+		textureStore(irradianceStorageCubemap, indexUV, irradiance);
 	});
 });
 
