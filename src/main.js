@@ -596,13 +596,13 @@ async function main() {
 			irradianceLightIntensityUniform.value = ev.value;
 		});
 
-	// pane
-	// 	.addBinding(PARAMS, "considerAngle", {
-	// 		label: "consider angle",
-	// 	})
-	// 	.on("change", (ev) => {
-	// 		considerAngleUniform.value = ev.value;
-	// 	});
+	pane
+		.addBinding(PARAMS, "considerAngle", {
+			label: "consider angle",
+		})
+		.on("change", (ev) => {
+			considerAngleUniform.value = ev.value;
+		});
 
 	pane
 		.addBinding(PARAMS, "probeGrid", {

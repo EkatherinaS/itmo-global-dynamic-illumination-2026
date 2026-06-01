@@ -553,32 +553,6 @@ export const verticalBlurShader = Fn(() => {
 	textureStore(probeVisibilityCoeffs, vec2(u, v), result).toReadWrite();
 });
 
-const getDistanceWeights = Fn(([probeInds]) => {
-	const probesAll = storage(probePositions, "vec4", probeCountUniform);
-
-	const totalInvDist = float(0);
-	Loop(4, ({ i }) => {
-		const probeInd = probeInds.element(i);
-		If(probeInd.notEqual(-1), () => {
-			const probe = probesAll.element(probeInd);
-			const dist = distance(positionWorld.xz, probe.xz);
-			totalInvDist.addAssign(float(1).div(dist));
-		});
-	});
-
-	const weights = array([float(1), float(0), float(0), float(0)]).toVar();
-	Loop(4, ({ i }) => {
-		const probeInd = probeInds.element(i);
-		If(probeInd.notEqual(-1), () => {
-			const probe = probesAll.element(probeInd);
-			const dist = distance(positionWorld.xz, probe.xz);
-			weights.element(i).assign(float(1).div(dist).div(totalInvDist));
-		});
-	});
-
-	return weights;
-});
-
 const getBarycentricWeights = Fn(([probeInds]) => {
 	const probesAll = storage(probePositions, "vec4", probeCountUniform);
 	const weights = array([float(1), float(0), float(0), float(0)]).toVar();
@@ -679,18 +653,52 @@ export const computeProbeLight = Fn(() => {
 			float(0.546274).mul(x.mul(x).sub(y.mul(y))),
 		]);
 
-		const modifs = getDistanceWeights(probeInds);
+		const probesAll = storage(probePositions, "vec4", probeCountUniform);
+		const probes = array([
+			probesAll.element(max(0, probeInds.element(0))),
+			probesAll.element(max(0, probeInds.element(1))),
+			probesAll.element(max(0, probeInds.element(2))),
+			probesAll.element(max(0, probeInds.element(3))),
+		]);
+
+		const totalInvDist = float(0);
+		Loop(4, ({ i }) => {
+			const probeInd = probeInds.element(i);
+			If(probeInd.notEqual(-1), () => {
+				const dist = distance(positionWorld.xz, probes.element(i).xz);
+				totalInvDist.addAssign(float(1).div(dist));
+			});
+		});
+
+		const modifs = array([float(1), float(0), float(0), float(0)]).toVar();
+		Loop(4, ({ i }) => {
+			const probeInd = probeInds.element(i);
+			If(probeInd.notEqual(-1), () => {
+				const dist = distance(positionWorld.xz, probes.element(i).xz);
+				modifs.element(i).assign(float(1).div(dist).div(totalInvDist));
+			});
+		});
+
 		Loop(4, SH_COEFFICIENTS_COUNT, ({ i, j }) => {
 			const probeInd = probeInds.element(i);
 			const shCoeff = vec4(
 				shCoeffs.element(probeInd.mul(SH_COEFFICIENTS_COUNT).add(j)),
 			);
+
+			const direction = probes.element(i).xyz.sub(positionWorld).normalize();
+			const dot = float(1.0);
+
+			If(considerAngleUniform, () => {
+				dot.assign(direction.dot(normalWorld));
+			});
+
 			If(probeInd.notEqual(-1), () => {
 				result.addAssign(
 					shCoeff
 						.mul(shBasis.element(j))
 						.mul(visCoefs.element(i))
-						.mul(modifs.element(i)),
+						.mul(modifs.element(i))
+						.mul(dot),
 				);
 			});
 		});
