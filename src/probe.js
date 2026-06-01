@@ -25,13 +25,12 @@ export const clearProbes = (scene) => {
 		}
 		camera.renderTarget.dispose();
 		camera.clear();
-		scene.remove(camera);
 	});
 	cameras = [];
 };
 
 export const addProbe = (x, y, z) => {
-	const target = new THREE.CubeRenderTarget(32, {
+	const target = new THREE.CubeRenderTarget(16, {
 		format: THREE.RGBAFormat,
 		type: THREE.FloatType,
 	});
@@ -44,35 +43,28 @@ export const addProbe = (x, y, z) => {
 export const updateProbes = async (scene, renderer) => {
 	const blockSize = SH_COEFFICIENTS_COUNT * 4;
 	const data = new Float32Array(blockSize * PROBE_COUNT);
-	clearHelpers(scene);
 
 	for (let i = 0; i < cameras.length; i++) {
-		const camera = cameras[i];
-		camera.update(renderer, scene);
+		cameras[i].update(renderer, scene);
 
 		const lightprobe = await LightProbeGenerator.fromCubeRenderTarget(
 			renderer,
-			camera.renderTarget,
+			cameras[i].renderTarget,
 		);
 		LightProbeGenerator.data = null;
 
-		lightprobe.position.copy(camera.position);
 		lightprobe.sh.coefficients.forEach((v, j) => {
 			data[i * blockSize + j * 3] = v.x;
 			data[i * blockSize + j * 3 + 1] = v.y;
 			data[i * blockSize + j * 3 + 2] = v.z;
 		});
-
-		sphericalHarmonics.copyArray(data);
-		sphericalHarmonics.needsUpdate = true;
-
-		const helper = new LightProbeHelper(lightprobe, 0.2);
-		helper.visible = false;
-		helpers.push(helper);
-		scene.add(helper);
-
 		lightprobe.dispose();
+
+		console.log("Camera", i, "/", PROBE_COUNT, "is created");
 	}
+
+	sphericalHarmonics.copyArray(data);
+	sphericalHarmonics.needsUpdate = true;
 };
 
 export const showLightProbeHelpers = () => {
