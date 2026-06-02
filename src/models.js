@@ -22,10 +22,13 @@ export function loadCar(callback) {
 				flatShading: false,
 			});
 			carModel.traverse((o) => {
-				if (o.isMesh) o.material = material;
+				if (o.isMesh) {
+					o.material = material;
+					o.receiveShadow = true;
+				}
 			});
 			carModel.position.set(2, 0, 1.5);
-			carModel.scale.set(0.22, 0.22, 0.22);
+			carModel.scale.set(0.15, 0.15, 0.15);
 			carModel.rotateY(-1);
 			callback();
 		},
@@ -42,7 +45,7 @@ export function loadMapGlb(callback) {
 		(gltf) => {
 			mapModel = gltf.scene;
 			mapModel.position.set(0.8, 0, 0.8);
-			mapModel.scale.set(0.02, 0.02, 0.02);
+			mapModel.scale.set(0.02, 0.03, 0.02);
 			callback();
 		},
 		undefined,
@@ -59,13 +62,13 @@ export function loadMapDxf(callback) {
 		mapModel.position.set(0, 0, 0);
 		mapModel.scale.set(0.01, 0.01, 0.01);
 		mapModel.rotateX(-Math.PI / 2);
-		mapModel.children.forEach((mesh) =>
-			helpers.push(new VertexNormalsHelper(mesh, 10, 0xff0000, 10)),
-		);
-		helpers.forEach((helper) => {
-			mapModel.add(helper);
-			helper.visible = false;
-		});
+		// mapModel.children.forEach((mesh) =>
+		// 	helpers.push(new VertexNormalsHelper(mesh, 10, 0xff0000, 10)),
+		// );
+		// helpers.forEach((helper) => {
+		// 	mapModel.add(helper);
+		// 	helper.visible = false;
+		// });
 		new THREE.Box3()
 			.setFromObject(mapModel)
 			.getCenter(mapModel.position)
@@ -116,17 +119,18 @@ export function addMap(scene) {
 	}
 }
 
-export function showMapNormals(value) {
-	helpers.forEach((helper) => (helper.visible = value));
-}
+// export function showMapNormals(value) {
+// 	helpers.forEach((helper) => (helper.visible = value));
+// }
 
-export function updateMaterialsMap() {
+export async function updateMaterialsMap() {
 	if (mapModel) {
-		mapModel.traverse((o) => {
+		mapModel.traverse(async (o) => {
 			if (o.isMesh) {
 				o.castShadow = true;
 				o.receiveShadow = true;
 				o.material.outputNode = computeGlobalLight();
+				//o.material.needsUpdate = true;
 			}
 		});
 	}

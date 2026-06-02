@@ -1,13 +1,9 @@
 import "./style.css";
 
-import {
-	OrbitControls,
-	VertexNormalsHelper,
-} from "three/examples/jsm/Addons.js";
+import { OrbitControls } from "three/examples/jsm/Addons.js";
 import { Inspector } from "three/examples/jsm/inspector/Inspector.js";
 import * as THREE from "three/webgpu";
 import { Pane } from "tweakpane";
-import { getWebGPUMemoryUsage } from "webgpu-memory";
 import {
 	BLUR_PROBE_COEF,
 	CONSIDER_ANGLE,
@@ -18,7 +14,6 @@ import {
 	DEPTH_HEIGHT,
 	DEPTH_WIDTH,
 	depthTexture,
-	depthTextureTest,
 	DIRECT_INTENSITY,
 	ENTER_SHADOW_AREA,
 	GRID_HEIGHT,
@@ -44,7 +39,6 @@ import {
 	WIDTH,
 } from "./constants";
 import {
-	blurProbeCoeffsUniform,
 	computeGlobalLight,
 	computeProbeVisibility,
 	computeRegularGridProbePositions,
@@ -53,7 +47,6 @@ import {
 	debugDepthMap,
 	debugProbes,
 	directLightIntensityUniform,
-	enterShadowAreaUniform,
 	gridHeightUniform,
 	gridWidthUniform,
 	horizontalBlurShader,
@@ -62,21 +55,16 @@ import {
 	layerCountUniform,
 	probeCountUniform,
 	probeLightIntensityUniform,
-	shadowAreaBlurUniform,
 	verticalBlurShader,
 } from "./global-light.js";
 import { Ground } from "./ground.js";
 import {
 	computeIrradianceCubemapFromLightBuffer,
 	computeLightBuffer,
-	getIrradianceColor,
-	getIrradianceTexture,
 } from "./irradiance-texture.js";
 import {
 	computeLuminanceCubemap,
 	computeLuminanceTexture,
-	getLuminanceColor,
-	getLuminanceCubemap,
 } from "./luminance-texture.js";
 import {
 	addCar,
@@ -90,13 +78,7 @@ import {
 	updateMaterialsCar,
 	updateMaterialsMap,
 } from "./models.js";
-import {
-	addProbe,
-	clearProbes,
-	hideLightProbeHelpers,
-	showLightProbeHelpers,
-	updateProbes,
-} from "./probe.js";
+import { addProbe, clearProbes, updateProbes } from "./probe.js";
 import { Skydome } from "./skydome.js";
 
 async function main() {
@@ -182,7 +164,7 @@ async function main() {
 	light.shadow.blurSamples = 4;
 	light.shadow.mapSize.width = 1024;
 	light.shadow.mapSize.height = 1024;
-	light.shadow.bias = -0.002;
+	light.shadow.bias = -0.005;
 
 	light.shadow.camera.rotation.set(0);
 	light.shadow.camera.left = -15;
@@ -209,8 +191,8 @@ async function main() {
 		1,
 		2,
 	);
-	const cameraHelper = new THREE.CameraHelper(testCamera);
-	//scene.add(cameraHelper);
+	// const cameraHelper = new THREE.CameraHelper(testCamera);
+	// scene.add(cameraHelper);
 	testCamera.position.set(0, 2, 0);
 	testCamera.lookAt(0, 0, 0);
 	scene.add(testCamera);
@@ -224,7 +206,7 @@ async function main() {
 		NEVG,
 		64,
 		8,
-		0x5c52f4,
+		0xbdc8fa,
 		0x1b1b1b,
 	);
 	skydomeMesh.setCamera(camera);
@@ -233,18 +215,19 @@ async function main() {
 	const ground = new Ground(20, 16, 0x1b1b1b);
 	ground.setScene(scene);
 
-	const skyHelper = new VertexNormalsHelper(skydomeMesh.mesh, 1, 0xff0000);
-	skyHelper.visible = false;
-	scene.add(skyHelper);
+	// const skyHelper = new VertexNormalsHelper(skydomeMesh.mesh, 1, 0xff0000);
+	// skyHelper.visible = false;
+	// scene.add(skyHelper);
 
 	// MODELS
 
-	loadMapDxf(() => {
+	loadMapGlb(() => {
 		addMap(scene);
-		computeDepthMap();
-		updateComputeProbes();
 		updateMaterialsMap();
 		ground.setMaterialOutputNode(computeGlobalLight);
+
+		computeDepthMap();
+		updateComputeProbes();
 
 		loadCar(() => {
 			addCar(scene);
@@ -270,8 +253,8 @@ async function main() {
 		await renderer.compute(updateHorizontalBlurShader);
 		await renderer.compute(updateVerticalBlurShader);
 
-		await renderer.compute(updateDebugDepthMap);
-		await renderer.compute(updateDebugProbes);
+		// await renderer.compute(updateDebugDepthMap);
+		// await renderer.compute(updateDebugProbes);
 
 		const bufferArray = await renderer.getArrayBufferAsync(probePositions);
 		const outputData = new Float32Array(bufferArray);
@@ -287,11 +270,10 @@ async function main() {
 		}
 
 		await updateProbes(scene, renderer);
-
-		const mem = getWebGPUMemoryUsage().memory;
-		console.log(`Буферы: ${(mem.buffer / 1048576).toFixed(2)} MB`);
-		console.log(`Текстуры: ${(mem.texture / 1048576).toFixed(2)} MB`);
-		console.log(`Всего: ${(mem.total / 1048576).toFixed(2)} MB`);
+		// const mem = getWebGPUMemoryUsage().memory;
+		// console.log(`Буферы: ${(mem.buffer / 1048576).toFixed(2)} MB`);
+		// console.log(`Текстуры: ${(mem.texture / 1048576).toFixed(2)} MB`);
+		// console.log(`Всего: ${(mem.total / 1048576).toFixed(2)} MB`);
 	}
 
 	function computeDepthMap() {
@@ -303,66 +285,66 @@ async function main() {
 
 	// DEBUG SECTION
 
-	const icosahedromMaterialLuminance = new THREE.MeshBasicNodeMaterial({
-		color: 0x00ff00,
-	});
-	const icosahedronGeometryLuminance = new THREE.IcosahedronGeometry(1, 64);
-	const icosahedronLuminance = new THREE.Mesh(
-		icosahedronGeometryLuminance,
-		icosahedromMaterialLuminance,
-	);
-	icosahedronLuminance.position.set(1.5, 3, 0);
-	//scene.add(icosahedronLuminance);
+	// const icosahedromMaterialLuminance = new THREE.MeshBasicNodeMaterial({
+	// 	color: 0x00ff00,
+	// });
+	// const icosahedronGeometryLuminance = new THREE.IcosahedronGeometry(1, 64);
+	// const icosahedronLuminance = new THREE.Mesh(
+	// 	icosahedronGeometryLuminance,
+	// 	icosahedromMaterialLuminance,
+	// );
+	// icosahedronLuminance.position.set(1.5, 3, 0);
+	// //scene.add(icosahedronLuminance);
 
-	const icosahedromMaterialIrradiance = new THREE.MeshBasicNodeMaterial({
-		color: 0x00ff00,
-	});
-	const icosahedronGeometryIrradiance = new THREE.IcosahedronGeometry(1, 64);
-	const icosahedronIrradiance = new THREE.Mesh(
-		icosahedronGeometryIrradiance,
-		icosahedromMaterialIrradiance,
-	);
-	icosahedronIrradiance.position.set(-1.5, 3, 0);
-	//scene.add(icosahedronIrradiance);
+	// const icosahedromMaterialIrradiance = new THREE.MeshBasicNodeMaterial({
+	// 	color: 0x00ff00,
+	// });
+	// const icosahedronGeometryIrradiance = new THREE.IcosahedronGeometry(1, 64);
+	// const icosahedronIrradiance = new THREE.Mesh(
+	// 	icosahedronGeometryIrradiance,
+	// 	icosahedromMaterialIrradiance,
+	// );
+	// icosahedronIrradiance.position.set(-1.5, 3, 0);
+	// //scene.add(icosahedronIrradiance);
 
-	const materialLuminance = new THREE.MeshBasicNodeMaterial({
-		color: 0x00ff00,
-	});
-	const geometryLuminance = new THREE.PlaneGeometry(0.004, 0.003);
-	const meshLuminance = new THREE.Mesh(geometryLuminance, materialLuminance);
-	meshLuminance.position.set(-camera.aspect * 0.005, -0.0005, -0.011);
-	camera.add(meshLuminance);
+	// const materialLuminance = new THREE.MeshBasicNodeMaterial({
+	// 	color: 0x00ff00,
+	// });
+	// const geometryLuminance = new THREE.PlaneGeometry(0.004, 0.003);
+	// const meshLuminance = new THREE.Mesh(geometryLuminance, materialLuminance);
+	// meshLuminance.position.set(-camera.aspect * 0.005, -0.0005, -0.011);
+	// camera.add(meshLuminance);
 
-	const materialIrradiance = new THREE.MeshBasicNodeMaterial({
-		color: 0x00ff00,
-	});
-	const geometryIrradiance = new THREE.PlaneGeometry(0.004, 0.003);
-	const meshIrradiance = new THREE.Mesh(geometryIrradiance, materialIrradiance);
-	meshIrradiance.position.set(-camera.aspect * 0.005, -0.004, -0.011);
-	camera.add(meshIrradiance);
+	// const materialIrradiance = new THREE.MeshBasicNodeMaterial({
+	// 	color: 0x00ff00,
+	// });
+	// const geometryIrradiance = new THREE.PlaneGeometry(0.004, 0.003);
+	// const meshIrradiance = new THREE.Mesh(geometryIrradiance, materialIrradiance);
+	// meshIrradiance.position.set(-camera.aspect * 0.005, -0.004, -0.011);
+	// camera.add(meshIrradiance);
 
-	const material = new THREE.MeshBasicMaterial({
-		map: depthTextureTest,
-	});
-	const plane = new THREE.Mesh(new THREE.PlaneGeometry(0.004, 0.004), material);
-	plane.position.set(-camera.aspect * 0.005, 0.0035, -0.011);
-	camera.add(plane);
+	// const material = new THREE.MeshBasicMaterial({
+	// 	map: depthTextureTest,
+	// });
+	// const plane = new THREE.Mesh(new THREE.PlaneGeometry(0.004, 0.004), material);
+	// plane.position.set(-camera.aspect * 0.005, 0.0035, -0.011);
+	// camera.add(plane);
 
 	// RENDER
-	let frameStartTime = 0;
+	// let frameStartTime = 0;
 
-	function updateFrameStats() {
-		const frame = renderer.inspector.currentFrame;
-		if (frame.frameId % 30 === 0) {
-			const totalTime30Frames = frame.startTime - frameStartTime;
-			const avgFrameTime = totalTime30Frames / 30;
-			const avgFPS = 1000 / avgFrameTime;
-			frameStartTime = frame.startTime;
-			console.log(
-				`Frame Time: ${avgFrameTime.toFixed(2)} FPS: ${avgFPS.toFixed(2)}`,
-			);
-		}
-	}
+	// function updateFrameStats() {
+	// 	const frame = renderer.inspector.currentFrame;
+	// 	if (frame.frameId % 30 === 0) {
+	// 		const totalTime30Frames = frame.startTime - frameStartTime;
+	// 		const avgFrameTime = totalTime30Frames / 30;
+	// 		const avgFPS = 1000 / avgFrameTime;
+	// 		frameStartTime = frame.startTime;
+	// 		console.log(
+	// 			`Frame Time: ${avgFrameTime.toFixed(2)} FPS: ${avgFPS.toFixed(2)}`,
+	// 		);
+	// 	}
+	// }
 
 	function render() {
 		const pixelRatio = renderer.getPixelRatio();
@@ -377,9 +359,9 @@ async function main() {
 			camera.aspect = width / height;
 			camera.updateProjectionMatrix();
 
-			meshLuminance.position.set(-camera.aspect * 0.005, -0.0005, -0.011);
-			meshIrradiance.position.set(-camera.aspect * 0.005, -0.004, -0.011);
-			plane.position.set(-camera.aspect * 0.005, 0.0035, -0.011);
+			// meshLuminance.position.set(-camera.aspect * 0.005, -0.0005, -0.011);
+			// meshIrradiance.position.set(-camera.aspect * 0.005, -0.004, -0.011);
+			// plane.position.set(-camera.aspect * 0.005, 0.0035, -0.011);
 		}
 
 		moveCar();
@@ -387,10 +369,10 @@ async function main() {
 
 		controls.update();
 
-		materialLuminance.colorNode = getLuminanceCubemap();
-		materialIrradiance.colorNode = getIrradianceTexture();
-		icosahedromMaterialLuminance.colorNode = getLuminanceColor();
-		icosahedromMaterialIrradiance.colorNode = getIrradianceColor();
+		// materialLuminance.colorNode = getLuminanceCubemap();
+		// materialIrradiance.colorNode = getIrradianceTexture();
+		// icosahedromMaterialLuminance.colorNode = getLuminanceColor();
+		// icosahedromMaterialIrradiance.colorNode = getIrradianceColor();
 
 		renderer.render(scene, camera);
 		renderer.resolveTimestampsAsync(THREE.TimestampQuery.RENDER);
@@ -414,7 +396,7 @@ async function main() {
 		interpolate: INTERPOLATE,
 		probeGrid: PROBE_GRID_TYPE,
 		followCar: false,
-		skydomskycolor: 0x29a1ff,
+		skydomskycolor: 0xbdc8fa,
 		skydomsunX: 0.1,
 		skydomsunY: 0.2,
 		skydomsunZ: 0.3,
@@ -436,54 +418,11 @@ async function main() {
 	});
 
 	pane
-		.addBinding(PARAMS, "blurProbeCoeffs", {
-			label: "blur radius",
-			min: 0,
-			max: 10,
-			step: 1,
-		})
-		.on("change", async (ev) => {
-			blurProbeCoeffsUniform.value = ev.value;
-
-			await renderer.compute(updateHorizontalBlurShader);
-			await renderer.compute(updateVerticalBlurShader);
-		});
-
-	pane
-		.addBinding(PARAMS, "enterShadowArea", {
-			label: "steps in shadow",
-			min: 0,
-			max: 10,
-			step: 1,
-		})
-		.on("change", async (ev) => {
-			enterShadowAreaUniform.value = ev.value;
-
-			await renderer.compute(updateProbeVisibility);
-			await renderer.compute(updateHorizontalBlurShader);
-			await renderer.compute(updateVerticalBlurShader);
-		});
-
-	pane
-		.addBinding(PARAMS, "shadowAreaBlur", {
-			label: "blur in shadow",
-			min: 0,
-			max: 10,
-			step: 1,
-		})
-		.on("change", async (ev) => {
-			shadowAreaBlurUniform.value = ev.value;
-
-			await renderer.compute(updateProbeVisibility);
-			await renderer.compute(updateHorizontalBlurShader);
-			await renderer.compute(updateVerticalBlurShader);
-		});
-
-	pane
 		.addBinding(PARAMS, "interpolate", {
 			label: "interpolate",
 		})
-		.on("change", (ev) => {
+		.on("change", async (ev) => {
+			if (!ev.last) return;
 			interpolatedUniform.value = ev.value;
 		});
 
@@ -492,6 +431,8 @@ async function main() {
 			label: "follow car",
 		})
 		.on("change", (ev) => {
+			if (!ev.last) return;
+
 			if (ev.value) {
 				controls.saveState();
 				scene.remove(camera);
@@ -510,6 +451,8 @@ async function main() {
 			view: "color",
 		})
 		.on("change", (ev) => {
+			if (!ev.last) return;
+
 			skydomeMesh.setSkyColor(ev.value);
 			updateProbes(scene, renderer);
 		});
@@ -522,6 +465,8 @@ async function main() {
 			step: 0.01,
 		})
 		.on("change", (ev) => {
+			if (!ev.last) return;
+
 			updateSunDirectionX(ev.value);
 			const normSunDir = SUN_DIR.clone().normalize();
 			skydomeMesh.setSunDirection(normSunDir);
@@ -548,6 +493,8 @@ async function main() {
 			step: 0.01,
 		})
 		.on("change", (ev) => {
+			if (!ev.last) return;
+
 			updateSunDirectionY(ev.value);
 			const normSunDir = SUN_DIR.clone().normalize();
 			skydomeMesh.setSunDirection(normSunDir);
@@ -574,6 +521,8 @@ async function main() {
 			step: 0.01,
 		})
 		.on("change", (ev) => {
+			if (!ev.last) return;
+
 			updateSunDirectionZ(ev.value);
 			const normSunDir = SUN_DIR.clone().normalize();
 			skydomeMesh.setSunDirection(normSunDir);
@@ -600,6 +549,8 @@ async function main() {
 			step: 0.01,
 		})
 		.on("change", (ev) => {
+			if (!ev.last) return;
+
 			updateNevg(ev.value);
 			skydomeMesh.setNevg(NEVG);
 
@@ -615,19 +566,6 @@ async function main() {
 
 			updateComputeSkydom();
 			updateProbes(scene, renderer);
-		});
-
-	// включение/выключение хелперов проб
-	pane
-		.addBinding(PARAMS, "probeHelpers", {
-			label: "probe helpers",
-		})
-		.on("change", (ev) => {
-			if (ev.value) {
-				showLightProbeHelpers();
-			} else {
-				hideLightProbeHelpers();
-			}
 		});
 
 	// изменение количества проб
@@ -698,6 +636,7 @@ async function main() {
 			step: 0.01,
 		})
 		.on("change", (ev) => {
+			if (!ev.last) return;
 			probeLightIntensityUniform.value = ev.value;
 		});
 	pane
@@ -708,6 +647,7 @@ async function main() {
 			step: 0.01,
 		})
 		.on("change", (ev) => {
+			if (!ev.last) return;
 			directLightIntensityUniform.value = ev.value;
 		});
 	pane
@@ -718,6 +658,7 @@ async function main() {
 			step: 0.01,
 		})
 		.on("change", (ev) => {
+			if (!ev.last) return;
 			irradianceLightIntensityUniform.value = ev.value;
 		});
 
@@ -726,6 +667,7 @@ async function main() {
 			label: "consider angle",
 		})
 		.on("change", (ev) => {
+			if (!ev.last) return;
 			considerAngleUniform.value = ev.value;
 		});
 
@@ -755,6 +697,63 @@ async function main() {
 		});
 
 	/*
+
+	pane
+		.addBinding(PARAMS, "blurProbeCoeffs", {
+			label: "blur radius",
+			min: 0,
+			max: 10,
+			step: 1,
+		})
+		.on("change", async (ev) => {
+			blurProbeCoeffsUniform.value = ev.value;
+
+			await renderer.compute(updateHorizontalBlurShader);
+			await renderer.compute(updateVerticalBlurShader);
+		});
+
+	pane
+		.addBinding(PARAMS, "enterShadowArea", {
+			label: "steps in shadow",
+			min: 0,
+			max: 10,
+			step: 1,
+		})
+		.on("change", async (ev) => {
+			enterShadowAreaUniform.value = ev.value;
+
+			await renderer.compute(updateProbeVisibility);
+			await renderer.compute(updateHorizontalBlurShader);
+			await renderer.compute(updateVerticalBlurShader);
+		});
+
+	pane
+		.addBinding(PARAMS, "shadowAreaBlur", {
+			label: "blur in shadow",
+			min: 0,
+			max: 10,
+			step: 1,
+		})
+		.on("change", async (ev) => {
+			shadowAreaBlurUniform.value = ev.value;
+
+			await renderer.compute(updateProbeVisibility);
+			await renderer.compute(updateHorizontalBlurShader);
+			await renderer.compute(updateVerticalBlurShader);
+    	});
+    
+	включение/выключение хелперов проб
+	pane
+		.addBinding(PARAMS, "probeHelpers", {
+			label: "probe helpers",
+		})
+		.on("change", (ev) => {
+			if (ev.value) {
+				showLightProbeHelpers();
+			} else {
+				hideLightProbeHelpers();
+			}
+		});
 
 	pane.addBinding(PARAMS, "shadows").on("change", (ev) => {
 		renderer.shadowMap.enabled = ev.value;

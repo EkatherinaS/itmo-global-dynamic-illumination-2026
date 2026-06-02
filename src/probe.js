@@ -1,4 +1,3 @@
-import { LightProbeHelper } from "three/examples/jsm/helpers/LightProbeHelperGPU.js";
 import * as THREE from "three/webgpu";
 import { LightProbeGenerator } from "../node_modules/three/examples/jsm/lights/LightProbeGenerator.js";
 import {
@@ -8,15 +7,6 @@ import {
 } from "./constants.js";
 
 let cameras = [];
-let helpers = [];
-
-export const clearHelpers = (scene) => {
-	helpers.forEach((helper) => {
-		helper.dispose();
-		scene.remove(helper);
-	});
-	helpers = [];
-};
 
 export const clearProbes = (scene) => {
 	cameras.forEach((camera) => {
@@ -34,7 +24,7 @@ export const addProbe = (x, y, z) => {
 		format: THREE.RGBAFormat,
 		type: THREE.FloatType,
 	});
-	const camera = new THREE.CubeCamera(0.001, 1, target);
+	const camera = new THREE.CubeCamera(0.001, 2, target);
 	target.dispose();
 	camera.position.set(x, y, z);
 	cameras.push(camera);
@@ -67,14 +57,24 @@ export const updateProbes = async (scene, renderer) => {
 	sphericalHarmonics.needsUpdate = true;
 };
 
-export const showLightProbeHelpers = () => {
-	helpers.forEach((helper) => {
-		helper.visible = true;
-	});
-};
+// let helpers = [];
 
-export const hideLightProbeHelpers = () => {
-	helpers.forEach((helper) => {
-		helper.visible = false;
-	});
-};
+// export const clearHelpers = (scene) => {
+// 	helpers.forEach((helper) => {
+// 		helper.dispose();
+// 		scene.remove(helper);
+// 	});
+// 	helpers = [];
+// };
+
+// export const showLightProbeHelpers = () => {
+// 	helpers.forEach((helper) => {
+// 		helper.visible = true;
+// 	});
+// };
+
+// export const hideLightProbeHelpers = () => {
+// 	helpers.forEach((helper) => {
+// 		helper.visible = false;
+// 	});
+// };
