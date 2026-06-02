@@ -221,13 +221,13 @@ async function main() {
 
 	// MODELS
 
-	loadMapGlb(() => {
+	loadMapGlb(async () => {
 		addMap(scene);
+		computeDepthMap();
+		await updateComputeProbes();
+
 		updateMaterialsMap();
 		ground.setMaterialOutputNode(computeGlobalLight);
-
-		computeDepthMap();
-		updateComputeProbes();
 
 		loadCar(() => {
 			addCar(scene);
@@ -741,7 +741,7 @@ async function main() {
 			await renderer.compute(updateHorizontalBlurShader);
 			await renderer.compute(updateVerticalBlurShader);
     	});
-    
+
 	включение/выключение хелперов проб
 	pane
 		.addBinding(PARAMS, "probeHelpers", {
