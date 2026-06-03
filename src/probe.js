@@ -34,6 +34,7 @@ export const updateProbes = async (scene, renderer) => {
 	const blockSize = SH_COEFFICIENTS_COUNT * 4;
 	const data = new Float32Array(blockSize * PROBE_COUNT);
 
+	const start = performance.now();
 	for (let i = 0; i < cameras.length; i++) {
 		cameras[i].update(renderer, scene);
 
@@ -50,11 +51,14 @@ export const updateProbes = async (scene, renderer) => {
 		});
 		lightprobe.dispose();
 
-		console.log("Camera", i, "/", PROBE_COUNT, "is created");
+		//console.log("Camera", i, "/", PROBE_COUNT, "is created");
 	}
 
 	sphericalHarmonics.copyArray(data);
 	sphericalHarmonics.needsUpdate = true;
+
+	const end = performance.now();
+	console.log(`1 probe time: ${(end - start) / cameras.length} ms`);
 };
 
 // let helpers = [];

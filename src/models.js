@@ -84,7 +84,7 @@ const radius = 11.596;
 
 export function moveCar() {
 	if (carModel) {
-		angle -= 0.005;
+		angle -= 0.003;
 		carModel.position.x = cx + radius * Math.cos(angle);
 		carModel.position.z = cz + radius * Math.sin(angle);
 		carModel.rotation.y = -angle + Math.PI;
