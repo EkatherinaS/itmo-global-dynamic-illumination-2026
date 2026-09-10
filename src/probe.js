@@ -30,7 +30,7 @@ export const addProbe = (x, y, z) => {
 	cameras.push(camera);
 };
 
-export const updateProbes = async (scene, renderer) => {
+export const updateProbes = async (scene, renderer, onProgress) => {
 	const blockSize = SH_COEFFICIENTS_COUNT * 4;
 	const data = new Float32Array(blockSize * PROBE_COUNT);
 
@@ -50,6 +50,9 @@ export const updateProbes = async (scene, renderer) => {
 			data[i * blockSize + j * 3 + 2] = v.z;
 		});
 		lightprobe.dispose();
+
+		if (onProgress) onProgress(i + 1, cameras.length);
+		if (i % 10 === 0) await new Promise((r) => requestAnimationFrame(r));
 
 		//console.log("Camera", i, "/", PROBE_COUNT, "is created");
 	}
