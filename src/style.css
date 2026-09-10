@@ -9,3 +9,19 @@ canvas {
     height: 100%;
     display: block;
 }
+
+#bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background: #eee;
+}
+
+#progress {
+    height: 100%;
+    width: 0;
+    background: #4caf50;
+    transition: width .1s;
+}

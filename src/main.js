@@ -94,7 +94,7 @@ async function main() {
 		trackTimestamp: true,
 	});
 	renderer.setPixelRatio(window.devicePixelRatio);
-	renderer.setSize(window.innerWidth, window.innerHeight);
+	renderer.setSize(window.innerWidth, window.innerHeight, false);
 	renderer.setAnimationLoop(render);
 	renderer.shadowMap.enabled = true;
 	renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -269,7 +269,13 @@ async function main() {
 			}
 		}
 
-		await updateProbes(scene, renderer);
+		const bar = document.getElementById("bar");
+		const progress = document.getElementById("progress");
+		bar.style.display = "block";
+		await updateProbes(scene, renderer, (done, total) => {
+			progress.style.width = (done / total) * 100 + "%";
+		});
+		bar.style.display = "none";
 		// const mem = getWebGPUMemoryUsage().memory;
 		// console.log(`Буферы: ${(mem.buffer / 1048576).toFixed(2)} MB`);
 		// console.log(`Текстуры: ${(mem.texture / 1048576).toFixed(2)} MB`);
@@ -357,7 +363,7 @@ async function main() {
 			renderer.domElement.height != Math.floor(height * pixelRatio);
 
 		if (needResize) {
-			renderer.setSize(width, height);
+			renderer.setSize(width, height, false);
 			camera.aspect = width / height;
 			camera.updateProjectionMatrix();
 
